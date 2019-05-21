@@ -1,0 +1,19 @@
+{
+
+    "name": "cn.capstones.reflect-helper",
+
+    "displayName": "Capstone Reflect Helper",
+
+    "version": "0.5.0",
+
+    "unity": "2018.3",
+
+    "description": "Capstone Reflect Helper",
+
+    "keywords": [
+        "unity"
+    ],
+
+    "category": "Unity"
+
+}
