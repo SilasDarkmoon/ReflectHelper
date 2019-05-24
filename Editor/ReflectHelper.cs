@@ -207,7 +207,7 @@ namespace Capstones.UnityEditorEx
         /// <summary>
         /// Is the asm written by user or is the asm a dll in project
         /// </summary>
-        public static bool IsUserOrPluginScript(this Assembly asm)
+        public static bool IsUserScriptOrPlugin(this Assembly asm)
         {
             return IsUserScript(asm) || IsUserPlugin(asm);
         }
