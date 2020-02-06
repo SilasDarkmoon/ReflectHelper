@@ -298,7 +298,14 @@ namespace Capstones.UnityEditorEx
             }
             else
             {
-                return type.Namespace + "." + type.Name;
+                if (string.IsNullOrEmpty(type.Namespace))
+                {
+                    return type.Name;
+                }
+                else
+                {
+                    return type.Namespace + "." + type.Name;
+                }
             }
         }
         public static string GetIDString(this MemberInfo member)
