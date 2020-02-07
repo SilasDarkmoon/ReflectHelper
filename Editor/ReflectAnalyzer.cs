@@ -16,6 +16,158 @@ namespace Capstones.UnityEditorEx
     {
         public static List<string> ParseMemberList()
         {
+            var list = ParseMemberList_AssemblyDefinition();
+            var uniqueset = new HashSet<string>(list);
+
+            // inherited member check.
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                foreach (var type in asm.GetTypes()) // It seems that the GetTypes returns nested types.
+                {
+                    var typestr = type.GetIDString();
+                    if (uniqueset.Contains("type " + typestr))
+                    {
+                        foreach (var member in type.GetMembers())
+                        {
+                            var dtype = member.DeclaringType;
+                            var rtype = member.ReflectedType;
+                            if (dtype != rtype)
+                            {
+                                // this means it is inherited.
+                                bool isStatic = false;
+                                string membertype = null;
+                                var defmember = member;
+                                if (member is PropertyInfo)
+                                {
+                                    membertype = "prop ";
+                                    var pinfo = member as PropertyInfo;
+                                    var gmethod = pinfo.GetGetMethod();
+                                    if (gmethod != null)
+                                    {
+                                        isStatic = gmethod.IsStatic;
+                                    }
+                                    else
+                                    {
+                                        var smethod = pinfo.GetSetMethod();
+                                        if (smethod != null)
+                                        {
+                                            isStatic = smethod.IsStatic;
+                                        }
+                                    }
+                                }
+                                else if (member is FieldInfo)
+                                {
+                                    membertype = "field ";
+                                    var finfo = member as FieldInfo;
+                                    isStatic = finfo.IsStatic;
+                                }
+                                else if (member is EventInfo)
+                                {
+                                    membertype = "event ";
+                                    var einfo = member as EventInfo;
+                                    var amethod = einfo.GetAddMethod();
+                                    if (amethod != null)
+                                    {
+                                        isStatic = amethod.IsStatic;
+                                    }
+                                    else
+                                    {
+                                        var rmethod = einfo.GetRemoveMethod();
+                                        if (rmethod != null)
+                                        {
+                                            isStatic = rmethod.IsStatic;
+                                        }
+                                    }
+                                }
+                                else if (member is Type)
+                                {
+                                    membertype = "type ";
+                                    isStatic = true;
+                                }
+                                else if (member is ConstructorInfo)
+                                {
+                                    membertype = "ctor ";
+                                    isStatic = true;
+                                }
+                                else if (member is MethodInfo)
+                                {
+                                    membertype = "func ";
+                                    var minfo = member as MethodInfo;
+                                    defmember = GetMethodDefinition(minfo);
+                                    isStatic = minfo.IsStatic;
+                                }
+
+                                if (membertype != null && !isStatic && defmember != null)
+                                {
+                                    var sb = new System.Text.StringBuilder();
+                                    sb.Append("member ");
+                                    sb.Append(membertype);
+                                    sb.Append("instance ");
+                                    sb.Append(defmember.DeclaringType.GetIDString());
+                                    sb.Append(" ");
+                                    sb.Append(defmember.GetIDString());
+
+                                    var dsig = sb.ToString();
+                                    if (uniqueset.Contains(dsig))
+                                    {
+                                        sb.Clear();
+                                        sb.Append("member ");
+                                        sb.Append(membertype);
+                                        sb.Append("instance ");
+                                        sb.Append(rtype.GetIDString());
+                                        sb.Append(" ");
+                                        sb.Append(member.GetIDString());
+                                        list.Add(sb.ToString());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return list;
+        }
+        public static MethodInfo GetMethodDefinition(MethodInfo minfo)
+        {
+            var dtype = minfo.DeclaringType;
+
+            if (dtype.IsGenericType)
+            {
+                var ddtype = dtype.GetGenericTypeDefinition();
+                if (ddtype == dtype)
+                {
+                    return minfo;
+                }
+                else
+                {
+                    Dictionary<Type, Type> replacement = new Dictionary<Type, Type>();
+                    var ddargs = ddtype.GetGenericArguments();
+                    var dargs = dtype.GetGenericArguments();
+                    for (int i = 0; i < dargs.Length && i < ddargs.Length; ++i)
+                    {
+                        replacement[ddargs[i]] = dargs[i];
+                    }
+                    var rsig = GetIDString(minfo);
+                    foreach (var method in ddtype.GetMethods())
+                    {
+                        if (method.GetIDStringWithReplacement(replacement) == rsig)
+                        {
+                            return method;
+                        }
+                    }
+                    Debug.LogError("Cannot find definition for " + dtype + "::" + minfo);
+                    return null; // what the hell? not found?
+                }
+            }
+            else
+            {
+                return minfo;
+            }
+        }
+
+        public static List<string> ParseMemberList_AssemblyDefinition()
+        {
             System.IO.Directory.CreateDirectory("EditorOutput/LuaPrecompile/TempAsms/iOS");
             var builtIOS = UnityEditor.Build.Player.PlayerBuildInterface.CompilePlayerScripts(new UnityEditor.Build.Player.ScriptCompilationSettings()
             {
@@ -43,7 +195,7 @@ namespace Capstones.UnityEditorEx
                 ParseMemberList(androidMemberList, path);
             }
             HashSet<string> androidMemberSet = new HashSet<string>(androidMemberList);
-            
+
             iOSMemberSet.IntersectWith(androidMemberSet);
 
             List<string> fulllist = new List<string>();
@@ -220,7 +372,7 @@ namespace Capstones.UnityEditorEx
                     sb.Append(',', atype.Rank - 1);
                 }
                 sb.Append("]");
-                return sb.ToString(); 
+                return sb.ToString();
             }
             else if (type.IsGenericParameter)
             {
@@ -286,6 +438,185 @@ namespace Capstones.UnityEditorEx
             return sb.ToString();
         }
 
+        public static List<string> ParseMemberList_AppDomain()
+        {
+            System.IO.Directory.CreateDirectory("EditorOutput/LuaPrecompile/TempAsms/iOS");
+            var builtIOS = UnityEditor.Build.Player.PlayerBuildInterface.CompilePlayerScripts(new UnityEditor.Build.Player.ScriptCompilationSettings()
+            {
+                group = BuildTargetGroup.iOS, //BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget),
+                target = BuildTarget.iOS, //EditorUserBuildSettings.activeBuildTarget,
+            }, "EditorOutput/LuaPrecompile/TempAsms/iOS");
+            AppDomain iOSDomain = AppDomain.CreateDomain("iOSReflectAnalyze");
+            var paths = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPaths(UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.SystemAssembly | UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UnityEngine | UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UserAssembly);
+            foreach (var path in paths)
+            {
+                try
+                {
+                    var bytes = System.IO.File.ReadAllBytes(path);
+                    iOSDomain.Load(bytes);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("Unable to load " + path + " in iOSDomain");
+                    Debug.LogError(e);
+                }
+            }
+            foreach (var asmfile in builtIOS.assemblies)
+            {
+                var path = "EditorOutput/LuaPrecompile/TempAsms/iOS/" + asmfile;
+                try
+                {
+                    var bytes = System.IO.File.ReadAllBytes(path);
+                    iOSDomain.Load(bytes);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("Unable to load " + path + " in iOSDomain");
+                    Debug.LogError(e);
+                }
+            }
+            List<string> iOSMemberList = ParseMemberListInAppDomain(iOSDomain);
+            HashSet<string> iOSMemberSet = new HashSet<string>(iOSMemberList);
+            AppDomain.Unload(iOSDomain);
+
+            System.IO.Directory.CreateDirectory("EditorOutput/LuaPrecompile/TempAsms/Android");
+            var builtAndroid = UnityEditor.Build.Player.PlayerBuildInterface.CompilePlayerScripts(new UnityEditor.Build.Player.ScriptCompilationSettings()
+            {
+                group = BuildTargetGroup.Android, //BuildPipeline.GetBuildTargetGroup(EditorUserBuildSettings.activeBuildTarget),
+                target = BuildTarget.Android, //EditorUserBuildSettings.activeBuildTarget,
+            }, "EditorOutput/LuaPrecompile/TempAsms/Android");
+            AppDomain androidDomain = AppDomain.CreateDomain("AndroidReflectAnalyze");
+            foreach (var path in paths)
+            {
+                try
+                {
+                    var bytes = System.IO.File.ReadAllBytes(path);
+                    androidDomain.Load(bytes);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("Unable to load " + path + " in androidDomain");
+                    Debug.LogError(e);
+                }
+            }
+            foreach (var asmfile in builtAndroid.assemblies)
+            {
+                var path = "EditorOutput/LuaPrecompile/TempAsms/Android/" + asmfile;
+                try
+                {
+                    var bytes = System.IO.File.ReadAllBytes(path);
+                    androidDomain.Load(bytes);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError("Unable to load " + path + " in androidDomain");
+                    Debug.LogError(e);
+                }
+            }
+            List<string> androidMemberList = ParseMemberListInAppDomain(androidDomain);
+            HashSet<string> androidMemberSet = new HashSet<string>(androidMemberList);
+            AppDomain.Unload(androidDomain);
+
+            iOSMemberSet.IntersectWith(androidMemberSet);
+
+            List<string> fulllist = new List<string>();
+            foreach (var line in iOSMemberList)
+            {
+                if (iOSMemberSet.Contains(line))
+                {
+                    fulllist.Add(line);
+                }
+            }
+            return fulllist;
+        }
+        private static List<string> ParseMemberListInAppDomain(AppDomain appdomain)
+        {
+            List<string> memberlist = new List<string>();
+            foreach (var asm in appdomain.GetAssemblies())
+            {
+                foreach (var type in asm.GetTypes()) // It seems that the GetTypes returns nested types.
+                {
+                    memberlist.Add("type " + GetIDString(type));
+                    foreach (var member in type.GetMembers())
+                    {
+                        bool isStatic = false;
+                        string membertype = null;
+                        if (member is PropertyInfo)
+                        {
+                            membertype = "prop ";
+                            var pinfo = member as PropertyInfo;
+                            var gmethod = pinfo.GetGetMethod();
+                            if (gmethod != null)
+                            {
+                                isStatic = gmethod.IsStatic;
+                            }
+                            else
+                            {
+                                var smethod = pinfo.GetSetMethod();
+                                if (smethod != null)
+                                {
+                                    isStatic = smethod.IsStatic;
+                                }
+                            }
+                        }
+                        else if (member is FieldInfo)
+                        {
+                            membertype = "field ";
+                            var finfo = member as FieldInfo;
+                            isStatic = finfo.IsStatic;
+                        }
+                        else if (member is EventInfo)
+                        {
+                            membertype = "event ";
+                            var einfo = member as EventInfo;
+                            var amethod = einfo.GetAddMethod();
+                            if (amethod != null)
+                            {
+                                isStatic = amethod.IsStatic;
+                            }
+                            else
+                            {
+                                var rmethod = einfo.GetRemoveMethod();
+                                if (rmethod != null)
+                                {
+                                    isStatic = rmethod.IsStatic;
+                                }
+                            }
+                        }
+                        else if (member is Type)
+                        {
+                            membertype = "type ";
+                            isStatic = true;
+                        }
+                        else if (member is ConstructorInfo)
+                        {
+                            membertype = "ctor ";
+                            isStatic = true;
+                        }
+                        else if (member is MethodBase)
+                        {
+                            membertype = "func ";
+                            var minfo = member as MethodBase;
+                            isStatic = minfo.IsStatic;
+                        }
+
+                        if (membertype != null)
+                        {
+                            var sb = new System.Text.StringBuilder();
+                            sb.Append("member ");
+                            sb.Append(membertype);
+                            sb.Append(isStatic ? "static " : "instance ");
+                            sb.Append(type.GetIDString());
+                            sb.Append(" ");
+                            sb.Append(member.GetIDString());
+                            memberlist.Add(sb.ToString());
+                        }
+                    }
+                }
+            }
+            return memberlist;
+        }
+
         public static string GetNameString(this Type type)
         {
             if (type == null)
@@ -308,6 +639,172 @@ namespace Capstones.UnityEditorEx
                 }
             }
         }
+        private static string GetIDStringWithReplacement(this Type type, Dictionary<Type, Type> replacement)
+        {
+            if (type.IsArray)
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.Append(type.GetElementType().GetIDStringWithReplacement(replacement));
+                sb.Append("[");
+                sb.Append(',', type.GetArrayRank() - 1);
+                sb.Append("]");
+                return sb.ToString();
+            }
+            else if (type.IsPointer)
+            {
+                return type.GetElementType().GetIDStringWithReplacement(replacement) + "*";
+            }
+            else if (type.IsByRef)
+            {
+                return type.GetElementType().GetIDStringWithReplacement(replacement) + "&";
+            }
+            else if (type.IsGenericParameter)
+            {
+                Type rep;
+                if (replacement != null && replacement.TryGetValue(type, out rep) && rep != null && rep != type)
+                {
+                    return rep.GetIDStringWithReplacement(replacement);
+                }
+                else
+                {
+                    return type.Name;
+                }
+            }
+            else if (type.IsGenericTypeDefinition)
+            {
+                Type rep;
+                if (replacement != null && replacement.TryGetValue(type, out rep) && rep != null && rep != type)
+                {
+                    return rep.GetIDStringWithReplacement(replacement);
+                }
+            }
+            if (type.IsGenericType)
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.Append(type.GetNameString());
+                var gpars = type.GetGenericArguments();
+                if (gpars != null && gpars.Length > 0)
+                {
+                    sb.Append("<");
+                    int parcnt = 0;
+                    foreach (var gpar in gpars)
+                    {
+                        if (++parcnt != 1)
+                        {
+                            sb.Append(",");
+                        }
+                        sb.Append(gpar.GetIDStringWithReplacement(replacement));
+                    }
+                    sb.Append(">");
+                }
+                return sb.ToString();
+            }
+            else
+            {
+                Type rep;
+                if (replacement != null && replacement.TryGetValue(type, out rep) && rep != null && rep != type)
+                {
+                    return rep.GetIDStringWithReplacement(replacement);
+                }
+                else
+                {
+                    return type.GetNameString();
+                }
+            }
+        }
+        private static string GetIDStringWithReplacement(this MethodInfo method, Dictionary<Type, Type> replacement)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append(method.Name);
+            //if (!method.IsConstructor)
+            {
+                var gpars = method.GetGenericArguments();
+                if (gpars != null && gpars.Length > 0)
+                {
+                    sb.Append("<");
+                    int gparcnt = 0;
+                    foreach (var gpar in gpars)
+                    {
+                        if (++gparcnt != 1)
+                        {
+                            sb.Append(",");
+                        }
+                        sb.Append(gpar.GetIDStringWithReplacement(replacement));
+                    }
+                    sb.Append(">");
+                }
+            }
+            sb.Append("(");
+            int parcnt = 0;
+            foreach (var par in method.GetParameters())
+            {
+                if (++parcnt != 1)
+                {
+                    sb.Append(",");
+                }
+                sb.Append(par.ParameterType.GetIDStringWithReplacement(replacement));
+            }
+            sb.Append(")");
+            // may be unnecessary
+            //if (!method.IsConstructor)
+            //{
+            //    sb.Append(method.ReturnType.GetNameString());
+            //}
+            return sb.ToString();
+        }
+        public static string GetNameString(this Type type, bool canIgnoreGenericArgInGenericDef)
+        {
+            if (type.IsArray)
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.Append(type.GetElementType().GetNameString(canIgnoreGenericArgInGenericDef));
+                sb.Append("[");
+                sb.Append(',', type.GetArrayRank() - 1);
+                sb.Append("]");
+                return sb.ToString();
+            }
+            else if (type.IsPointer)
+            {
+                return type.GetElementType().GetNameString(canIgnoreGenericArgInGenericDef) + "*";
+            }
+            else if (type.IsByRef)
+            {
+                return type.GetElementType().GetNameString(canIgnoreGenericArgInGenericDef) + "&";
+            }
+            else if (type.IsGenericParameter)
+            {
+                return type.Name;
+            }
+            else if (type.IsGenericTypeDefinition && canIgnoreGenericArgInGenericDef)
+            {
+                return type.GetNameString();
+            }
+            else if (type.IsGenericType)
+            {
+                var sb = new System.Text.StringBuilder();
+                sb.Append(type.GetNameString());
+                var gpars = type.GetGenericArguments();
+                if (gpars != null && gpars.Length > 0)
+                {
+                    sb.Append("<");
+                    int parcnt = 0;
+                    foreach (var gpar in gpars)
+                    {
+                        if (++parcnt != 1)
+                        {
+                            sb.Append(",");
+                        }
+                        sb.Append(gpar.GetNameString(false));
+                    }
+                    sb.Append(">");
+                }
+                return sb.ToString();
+            }
+            else
+            {
+                return type.GetNameString();
+            }
+        }
         public static string GetIDString(this MemberInfo member)
         {
             if (member == null)
@@ -317,56 +814,7 @@ namespace Capstones.UnityEditorEx
             else if (member is Type)
             {
                 var type = member as Type;
-                if (type.IsArray)
-                {
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append(type.GetElementType().GetIDString());
-                    sb.Append("[");
-                    sb.Append(',', type.GetArrayRank() - 1);
-                    sb.Append("]");
-                    return sb.ToString();
-                }
-                else if (type.IsPointer)
-                {
-                    return type.GetElementType().GetIDString() + "*";
-                }
-                else if (type.IsByRef)
-                {
-                    return type.GetElementType().GetIDString() + "&";
-                }
-                else if (type.IsGenericParameter)
-                {
-                    return type.Name;
-                }
-                else if (type.IsGenericTypeDefinition)
-                {
-                    return type.GetNameString();
-                }
-                else if (type.IsGenericType)
-                {
-                    var sb = new System.Text.StringBuilder();
-                    sb.Append(type.GetGenericTypeDefinition().GetIDString());
-                    var gpars = type.GetGenericArguments();
-                    if (gpars != null && gpars.Length > 0)
-                    {
-                        sb.Append("<");
-                        int parcnt = 0;
-                        foreach (var gpar in gpars)
-                        {
-                            if (++parcnt != 1)
-                            {
-                                sb.Append(",");
-                            }
-                            sb.Append(gpar.GetIDString());
-                        }
-                        sb.Append(">");
-                    }
-                    return sb.ToString();
-                }
-                else
-                {
-                    return type.GetNameString();
-                }
+                return type.GetNameString(true);
             }
             else if (member is MethodBase)
             {
@@ -386,7 +834,7 @@ namespace Capstones.UnityEditorEx
                             {
                                 sb.Append(",");
                             }
-                            sb.Append(gpar.GetIDString());
+                            sb.Append(gpar.GetNameString(false));
                         }
                         sb.Append(">");
                     }
@@ -399,7 +847,7 @@ namespace Capstones.UnityEditorEx
                     {
                         sb.Append(",");
                     }
-                    sb.Append(par.ParameterType.GetIDString());
+                    sb.Append(par.ParameterType.GetNameString(false));
                 }
                 sb.Append(")");
                 // may be unnecessary
