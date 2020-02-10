@@ -458,6 +458,7 @@ namespace Capstones.UnityEditorEx
                 catch (Exception e)
                 {
                     Debug.LogError("Unable to load " + path + " in iOSDomain");
+                    // TODO: when we can not load a assembly, we could find the same one in CurrentDomain and load this existing one.
                     Debug.LogError(e);
                 }
             }
