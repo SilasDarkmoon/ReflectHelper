@@ -355,11 +355,11 @@ namespace Capstones.UnityEditorEx
                 ParseTypeMemberList(members, ntype);
             }
         }
-        private static string GetIDString(this TypeDefinition type)
+        internal static string GetIDString(this TypeDefinition type)
         {
             return type.FullName.Replace('/', '+');
         }
-        private static string GetIDString(this TypeReference type)
+        internal static string GetIDString(this TypeReference type)
         {
             if (type.IsArray)
             {
@@ -400,7 +400,7 @@ namespace Capstones.UnityEditorEx
                 return sb.ToString();
             }
         }
-        private static string GetIDString(this MethodDefinition method)
+        internal static string GetIDString(this MethodDefinition method)
         {
             var sb = new System.Text.StringBuilder();
             sb.Append(method.Name);
