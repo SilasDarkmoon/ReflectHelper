@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using Capstones.UnityEngineEx;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -315,6 +316,98 @@ namespace Capstones.UnityEditorEx
             InsertRange(collection, index, (IEnumerable<T>)values);
         }
         #endregion
+
+        public static void GenerateByRefUtils()
+        {
+            var compiler = new Microsoft.CSharp.CSharpCodeProvider();
+            var compilerOption = new System.CodeDom.Compiler.CompilerParameters();
+            var root = CapsModEditor.GetPackageOrModRoot(CapsEditorUtils.__MOD__);
+            var src = root + "/ByRefUtils~/ByRefUtils.cs";
+            var tar = root + "/ByRefUtils~/ByRefUtils.dll";
+            compilerOption.OutputAssembly = tar;
+            var compileresult = compiler.CompileAssemblyFromFile(compilerOption, src);
+
+            if (compileresult.Errors.Count > 0)
+            {
+                foreach (var error in compileresult.Errors)
+                {
+                    Debug.LogError(error);
+                }
+                return;
+            }
+
+            var asm = LoadAssembly(tar);
+            var asminfo = _LoadedAsms["ByRefUtils"];
+
+            var type = asm.MainModule.GetType("Capstones.UnityEngineEx.ByRefUtils");
+            TypeDefinition reftype = null;
+            foreach (var ntype in type.NestedTypes)
+            {
+                if (ntype.Name == "Ref`1")
+                {
+                    reftype = ntype;
+                    break;
+                }
+            }
+            var field = new FieldDefinition("_Ref", FieldAttributes.Private, asm.MainModule.TypeSystem.IntPtr);
+            reftype.Fields.Add(field);
+            var selfreftype = new GenericInstanceType(reftype);
+            selfreftype.GenericArguments.Add(reftype.GenericParameters[0]);
+
+            {
+                var method = reftype.GetMethod("GetRef");
+                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
+                {
+                    method.Body.Instructions.RemoveAt(i);
+                }
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldarg_0);
+                emitter.Emit(OpCodes.Ldfld, field);
+                emitter.Emit(OpCodes.Ret);
+            }
+            {
+                var method = reftype.GetMethod("SetRef");
+                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
+                {
+                    method.Body.Instructions.RemoveAt(i);
+                }
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldarg_0);
+                emitter.Emit(OpCodes.Ldarg_1);
+                emitter.Emit(OpCodes.Stfld, field);
+                emitter.Emit(OpCodes.Ret);
+            }
+            {
+                var method = type.GetMethod("RefEquals");
+                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
+                {
+                    method.Body.Instructions.RemoveAt(i);
+                }
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldarg_0);
+                emitter.Emit(OpCodes.Ldarg_1);
+                emitter.Emit(OpCodes.Ceq);
+                emitter.Emit(OpCodes.Ret);
+            }
+            {
+                var method = type.GetMethod("GetEmptyRef");
+                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
+                {
+                    method.Body.Instructions.RemoveAt(i);
+                }
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldnull);
+                emitter.Emit(OpCodes.Ret);
+            }
+
+            asminfo.Dirty = true;
+            asminfo.Dispose();
+            _LoadedAsms.Remove("ByRefUtils");
+        }
 
         internal static TypeDefinition GetLuaPack(int paramCnt)
         {
