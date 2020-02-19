@@ -293,6 +293,17 @@ namespace Capstones.UnityEditorEx
             }
             return null;
         }
+        internal static TypeDefinition GetNestedType(this TypeDefinition type, string name)
+        {
+            foreach (var ntype in type.NestedTypes)
+            {
+                if (ntype.Name == name)
+                {
+                    return ntype;
+                }
+            }
+            return null;
+        }
         internal static void AddRange<T>(this Mono.Collections.Generic.Collection<T> collection, IEnumerable<T> values)
         {
             foreach (var val in values)
@@ -315,6 +326,13 @@ namespace Capstones.UnityEditorEx
         {
             InsertRange(collection, index, (IEnumerable<T>)values);
         }
+        //internal static void Clear<T>(this Mono.Collections.Generic.Collection<T> collection)
+        //{
+        //    for (int i = collection.Count - 1; i >= 0; --i)
+        //    {
+        //        collection.RemoveAt(i);
+        //    }
+        //}
         #endregion
 
         public static void GenerateByRefUtils()
@@ -340,26 +358,12 @@ namespace Capstones.UnityEditorEx
             var asminfo = _LoadedAsms["ByRefUtils"];
 
             var type = asm.MainModule.GetType("Capstones.UnityEngineEx.ByRefUtils");
-            TypeDefinition reftype = null;
-            foreach (var ntype in type.NestedTypes)
-            {
-                if (ntype.Name == "Ref`1")
-                {
-                    reftype = ntype;
-                    break;
-                }
-            }
-            var field = new FieldDefinition("_Ref", FieldAttributes.Private, asm.MainModule.TypeSystem.IntPtr);
-            reftype.Fields.Add(field);
-            var selfreftype = new GenericInstanceType(reftype);
-            selfreftype.GenericArguments.Add(reftype.GenericParameters[0]);
+            TypeDefinition reftype = type.GetNestedType("RawRef");
+            var field = reftype.GetField("_Ref");
 
             {
                 var method = reftype.GetMethod("GetRef");
-                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
-                {
-                    method.Body.Instructions.RemoveAt(i);
-                }
+                method.Body.Instructions.Clear();
 
                 var emitter = method.Body.GetILProcessor();
                 emitter.Emit(OpCodes.Ldarg_0);
@@ -368,10 +372,7 @@ namespace Capstones.UnityEditorEx
             }
             {
                 var method = reftype.GetMethod("SetRef");
-                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
-                {
-                    method.Body.Instructions.RemoveAt(i);
-                }
+                method.Body.Instructions.Clear();
 
                 var emitter = method.Body.GetILProcessor();
                 emitter.Emit(OpCodes.Ldarg_0);
@@ -381,10 +382,7 @@ namespace Capstones.UnityEditorEx
             }
             {
                 var method = type.GetMethod("RefEquals");
-                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
-                {
-                    method.Body.Instructions.RemoveAt(i);
-                }
+                method.Body.Instructions.Clear();
 
                 var emitter = method.Body.GetILProcessor();
                 emitter.Emit(OpCodes.Ldarg_0);
@@ -394,13 +392,20 @@ namespace Capstones.UnityEditorEx
             }
             {
                 var method = type.GetMethod("GetEmptyRef");
-                for (int i = method.Body.Instructions.Count - 1; i >= 0; --i)
-                {
-                    method.Body.Instructions.RemoveAt(i);
-                }
+                method.Body.Instructions.Clear();
 
                 var emitter = method.Body.GetILProcessor();
                 emitter.Emit(OpCodes.Ldnull);
+                emitter.Emit(OpCodes.Ret);
+            }
+            {
+                var method = type.GetMethod("IsEmpty");
+                method.Body.Instructions.Clear();
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldarg_0);
+                emitter.Emit(OpCodes.Ldnull);
+                emitter.Emit(OpCodes.Ceq);
                 emitter.Emit(OpCodes.Ret);
             }
 
