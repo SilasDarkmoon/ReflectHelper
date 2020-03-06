@@ -14,9 +14,6 @@
         "unity"
     ],
 
-    "category": "Unity",
+    "category": "Unity"
 
-    "dependencies": {
-        "nuget.mono-cecil": "0.1.6-preview"
-    }
 }
