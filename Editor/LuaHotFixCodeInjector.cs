@@ -357,8 +357,8 @@ namespace Capstones.UnityEditorEx
             var asm = LoadAssembly(tar);
             var asminfo = _LoadedAsms["ByRefUtils"];
 
-            var type = asm.MainModule.GetType("Capstones.UnityEngineEx.ByRefUtils");
-            TypeDefinition reftype = type.GetNestedType("RawRef");
+            var type = asm.MainModule.GetType("Capstones.ByRefUtils.Ref");
+            TypeDefinition reftype = asm.MainModule.GetType("Capstones.ByRefUtils.RawRef");
             var field = reftype.GetField("_Ref");
 
             {
@@ -372,6 +372,25 @@ namespace Capstones.UnityEditorEx
             }
             {
                 var method = reftype.GetMethod("SetRef");
+                method.Body.Instructions.Clear();
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldarg_0);
+                emitter.Emit(OpCodes.Ldarg_1);
+                emitter.Emit(OpCodes.Stfld, field);
+                emitter.Emit(OpCodes.Ret);
+            }
+            {
+                var method = reftype.GetMethod("GetRefObj");
+                method.Body.Instructions.Clear();
+
+                var emitter = method.Body.GetILProcessor();
+                emitter.Emit(OpCodes.Ldarg_0);
+                emitter.Emit(OpCodes.Ldfld, field);
+                emitter.Emit(OpCodes.Ret);
+            }
+            {
+                var method = reftype.GetMethod("SetRefObj");
                 method.Body.Instructions.Clear();
 
                 var emitter = method.Body.GetILProcessor();
