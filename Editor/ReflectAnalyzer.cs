@@ -206,10 +206,26 @@ namespace Capstones.UnityEditorEx
                     fulllist.Add(line);
                 }
             }
-            var paths = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPaths(UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.SystemAssembly | UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UnityEngine | UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UserAssembly);
+            var paths = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPaths(UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.SystemAssembly | UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UnityEngine);
             foreach (var path in paths)
             {
                 ParseMemberList(fulllist, path);
+            }
+
+            paths = AssetDatabase.GetAllAssetPaths();
+            foreach (var path in paths)
+            {
+                if (path.EndsWith(".dll", StringComparison.InvariantCultureIgnoreCase) || path.EndsWith(".exe", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var importer = AssetImporter.GetAtPath(path) as PluginImporter;
+                    if (importer != null && !importer.isNativePlugin && !importer.IsExplicitlyReferenced())
+                    {
+                        if (importer.IsPluginOnPlatform(BuildTarget.iOS) && importer.IsPluginOnPlatform(BuildTarget.Android))
+                        {
+                            ParseMemberList(fulllist, path);
+                        }
+                    }
+                }
             }
             return fulllist;
         }
@@ -242,6 +258,28 @@ namespace Capstones.UnityEditorEx
             {
                 return;
             }
+
+            bool obsoleted = false;
+            var attributes = type.CustomAttributes;
+            for (int i = 0; i < attributes.Count; ++i)
+            {
+                var attr = attributes[i];
+                if (attr.AttributeType.FullName == "System.ObsoleteAttribute")
+                {
+                    if (attr.ConstructorArguments.Count >= 2)
+                    {
+                        if (attr.ConstructorArguments[1].Value.Equals(true))
+                        {
+                            obsoleted = true;
+                        }
+                    }
+                }
+            }
+            if (obsoleted)
+            {
+                return;
+            }
+
             var line = "type " + type.GetIDString();
             members.Add(line);
 
