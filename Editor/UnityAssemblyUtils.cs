@@ -104,5 +104,46 @@ namespace Capstones.UnityEditorEx
             }
             return _Func_IsExplicitlyReferenced(importer);
         }
+
+        public static readonly Dictionary<string, Func<string, bool>> OptionalAssembliesAndPackages = new Dictionary<string, Func<string, bool>>()
+        {
+            { "com.unity.analytics", package => UnityEditor.Analytics.AnalyticsSettings.enabled },
+        };
+        public static bool IsPackageOrAssemblyEnabled(string item)
+        {
+            Func<string, bool> checkFunc;
+            if (OptionalAssembliesAndPackages.TryGetValue(item, out checkFunc))
+            {
+                return checkFunc(item);
+            }
+            return true;
+        }
+        public static bool IsAssemblyEnabled(string assembly)
+        {
+            assembly = assembly.Replace('\\', '/');
+            var asset = assembly;
+            if (!assembly.StartsWith("Assets/", StringComparison.InvariantCultureIgnoreCase) && !assembly.StartsWith("Packages/", StringComparison.InvariantCultureIgnoreCase))
+            {
+                asset = UnityEditorEx.CapsModEditor.GetAssetNameFromPath(assembly);
+            }
+            if (asset == null)
+            {
+                return true;
+            }
+            var filename = System.IO.Path.GetFileName(assembly);
+            if (!IsPackageOrAssemblyEnabled(filename))
+            {
+                return false;
+            }
+            var package = UnityEditorEx.CapsModEditor.GetAssetPackage(asset);
+            if (!string.IsNullOrEmpty(package))
+            {
+                if (!IsPackageOrAssemblyEnabled(package))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 }

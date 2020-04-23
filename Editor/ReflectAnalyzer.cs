@@ -206,12 +206,65 @@ namespace Capstones.UnityEditorEx
                     fulllist.Add(line);
                 }
             }
-            var paths = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPaths(UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.SystemAssembly | UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UnityEngine);
+
+            // System dlls
+            var paths = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPaths(UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.SystemAssembly);
             foreach (var path in paths)
             {
                 ParseMemberList(fulllist, path);
             }
 
+            // UnityEngine dlls
+            paths = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPaths(UnityEditor.Compilation.CompilationPipeline.PrecompiledAssemblySources.UnityEngine);
+            var editorPath = UnityEditor.EditorApplication.applicationContentsPath;
+            var editorFiles = Capstones.UnityEngineEx.PlatDependant.GetAllFiles(editorPath);
+            Dictionary<string, List<string>> asm2paths = new Dictionary<string, List<string>>();
+            foreach (var path in editorFiles)
+            {
+                if (path.EndsWith(".dll", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    var asm = System.IO.Path.GetFileNameWithoutExtension(path);
+                    List<string> asmfiles;
+                    if (!asm2paths.TryGetValue(asm, out asmfiles))
+                    {
+                        asmfiles = new List<string>();
+                        asm2paths[asm] = asmfiles;
+                    }
+                    asmfiles.Add(path);
+                }
+            }
+            foreach (var path in paths)
+            {
+                var asm = System.IO.Path.GetFileNameWithoutExtension(path);
+                List<string> asmfiles;
+                if (asm2paths.TryGetValue(asm, out asmfiles))
+                {
+                    if (asmfiles.Count > 1)
+                    { // only one means it only appears in Editor
+                        HashSet<string> commonMembers = null;
+                        foreach (var file in asmfiles)
+                        {
+                            var singleFileMember = new List<string>();
+                            ParseMemberList(singleFileMember, file);
+                            if (commonMembers == null)
+                            {
+                                commonMembers = new HashSet<string>(singleFileMember);
+                            }
+                            else
+                            {
+                                commonMembers.IntersectWith(singleFileMember);
+                            }
+                        }
+
+                        foreach (var line in commonMembers)
+                        {
+                            fulllist.Add(line);
+                        }
+                    }
+                }
+            }
+
+            // The dll in assets or package.
             paths = AssetDatabase.GetAllAssetPaths();
             foreach (var path in paths)
             {
@@ -222,7 +275,10 @@ namespace Capstones.UnityEditorEx
                     {
                         if (importer.IsPluginOnPlatform(BuildTarget.iOS) && importer.IsPluginOnPlatform(BuildTarget.Android))
                         {
-                            ParseMemberList(fulllist, path);
+                            if (UnityAssemblyUtils.IsAssemblyEnabled(path))
+                            {
+                                ParseMemberList(fulllist, path);
+                            }
                         }
                     }
                 }
