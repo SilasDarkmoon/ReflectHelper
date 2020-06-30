@@ -258,12 +258,19 @@ namespace Capstones.UnityEditorEx
                     Result = null;
                     if (compileresult.Errors.Count > 0)
                     {
-                        foreach (var error in compileresult.Errors)
+                        foreach (System.CodeDom.Compiler.CompilerError error in compileresult.Errors)
                         {
-                            Debug.LogError(error);
-                            if (Result == null)
+                            if (error.IsWarning)
                             {
-                                Result = error.ToString();
+                                Debug.LogWarning(error);
+                            }
+                            else
+                            {
+                                Debug.LogError(error);
+                                if (Result == null)
+                                {
+                                    Result = error.ToString();
+                                }
                             }
                         }
                     }
