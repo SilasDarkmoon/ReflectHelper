@@ -47,6 +47,7 @@ namespace Capstones.UnityEditorEx
             "using lua = Capstones.LuaLib.LuaCoreLib;",
             "using lual = Capstones.LuaLib.LuaAuxLib;",
             "using luae = Capstones.LuaLib.LuaLibEx;",
+            "using static Capstones.LuaWrap.LuaPack;",
 
             "using Object = UnityEngine.Object;",
         };
