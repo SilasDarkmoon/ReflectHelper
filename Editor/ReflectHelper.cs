@@ -521,5 +521,281 @@ namespace Capstones.UnityEditorEx
                 return GetScriptMod(member.DeclaringType);
             }
         }
+
+        private static readonly HashSet<Type> _AssetRootTypes = new HashSet<Type>()
+        {
+            typeof(object),
+            typeof(Object),
+            typeof(ScriptableObject),
+            typeof(Component),
+            typeof(Behaviour),
+            typeof(MonoBehaviour),
+            typeof(SceneAsset),
+        };
+        public static bool IsEditorOnly(Type assetType)
+        {
+            bool isclient = false;
+            var type = assetType;
+            while (type != null && !_AssetRootTypes.Contains(type))
+            {
+                if (GetScriptCategory(type.Assembly) != ScriptCategory.Editor)
+                {
+                    isclient = true;
+                    break;
+                }
+                type = type.BaseType;
+            }
+            if (type == assetType)
+            { // the asset type is root type?
+                isclient = true;
+            }
+            return !isclient;
+        }
+        private static readonly Dictionary<Type, bool> _CachedEditorOnlyFlags = new Dictionary<Type, bool>();
+        public static bool IsEditorOnlyCached(Type assetType)
+        {
+            LoadSymbols();
+            bool flag;
+            if (!_CachedEditorOnlyFlags.TryGetValue(assetType, out flag))
+            {
+                _CachedEditorOnlyFlags[assetType] = flag = IsEditorOnly(assetType);
+            }
+            return flag;
+        }
+        public static void ClearEditorOnlyCache()
+        {
+            _CachedEditorOnlyFlags.Clear();
+            UnloadSymbols();
+        }
+
+        public static HashSet<Type> GetEditorOnlyTypes()
+        {
+            _CachedEditorOnlyFlags.Clear();
+            var shouldunload = LoadSymbols();
+            var allassets = AssetDatabase.GetAllAssetPaths();
+            HashSet<Type> result = new HashSet<Type>();
+            foreach (var asset in allassets)
+            {
+                if (string.IsNullOrEmpty(asset))
+                {
+                    continue;
+                }
+                if (System.IO.Directory.Exists(asset))
+                {
+                    continue;
+                }
+                if (CapsResInfoEditor.IsAssetScript(asset))
+                {
+                    continue;
+                }
+
+                bool inPackage = false;
+                if (asset.StartsWith("Assets/Mods/") || (inPackage = asset.StartsWith("Packages/")))
+                {
+                    string sub;
+                    if (inPackage)
+                    {
+                        sub = asset.Substring("Packages/".Length);
+                    }
+                    else
+                    {
+                        sub = asset.Substring("Assets/Mods/".Length);
+                    }
+                    var index = sub.IndexOf('/');
+                    if (index < 0)
+                    {
+                        continue;
+                    }
+                    sub = sub.Substring(index + 1);
+                    if (!sub.StartsWith("CapsRes/"))
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    if (!asset.StartsWith("Assets/CapsRes/"))
+                    {
+                        continue;
+                    }
+                }
+
+                var type = AssetDatabase.GetMainAssetTypeAtPath(asset);
+                if (type == null)
+                {
+                    Debug.LogErrorFormat("{0} is unknown type. Missing Script?", asset);
+                }
+                else
+                {
+                    if (IsEditorOnlyCached(type))
+                    {
+                        result.Add(type);
+                    }
+                }
+            }
+            if (shouldunload)
+            {
+                UnloadSymbols();
+            }
+            _CachedEditorOnlyFlags.Clear();
+            return result;
+        }
     }
 }
+
+#if UNITY_EDITOR
+#if UNITY_INCLUDE_TESTS
+#region TESTS
+namespace Capstones.Test
+{
+    using Capstones.UnityEngineEx;
+    using Capstones.UnityEditorEx;
+
+    public static class TestResInfo
+    {
+        [UnityEditor.MenuItem("Test/Res/Show Editor Only Assets", priority = 400010)]
+        public static void ShowEditorOnlyAssets()
+        {
+            var allassets = AssetDatabase.GetAllAssetPaths();
+            foreach (var asset in allassets)
+            {
+                if (string.IsNullOrEmpty(asset))
+                {
+                    continue;
+                }
+                if (System.IO.Directory.Exists(asset))
+                {
+                    continue;
+                }
+                if (CapsResInfoEditor.IsAssetScript(asset))
+                {
+                    continue;
+                }
+
+                string mod = null;
+                string opmod = null;
+                string dist = null;
+                string norm = asset;
+                bool inPackage = false;
+                if (asset.StartsWith("Assets/Mods/") || (inPackage = asset.StartsWith("Packages/")))
+                {
+                    string sub;
+                    if (inPackage)
+                    {
+                        sub = asset.Substring("Packages/".Length);
+                    }
+                    else
+                    {
+                        sub = asset.Substring("Assets/Mods/".Length);
+                    }
+                    var index = sub.IndexOf('/');
+                    if (index < 0)
+                    {
+                        continue;
+                    }
+                    mod = sub.Substring(0, index);
+                    if (inPackage)
+                    {
+                        mod = CapsModEditor.GetPackageModName(mod);
+                    }
+                    if (string.IsNullOrEmpty(mod))
+                    {
+                        continue;
+                    }
+                    sub = sub.Substring(index + 1);
+                    if (!sub.StartsWith("CapsRes/"))
+                    {
+                        continue;
+                    }
+                    var moddesc = ResManager.GetDistributeDesc(mod);
+                    bool isMainPackage = inPackage && !CapsModEditor.ShouldTreatPackageAsMod(CapsModEditor.GetPackageName(mod));
+                    if (moddesc == null || moddesc.InMain || isMainPackage)
+                    {
+                        mod = "";
+                        if (moddesc != null && moddesc.IsOptional && !isMainPackage)
+                        {
+                            opmod = moddesc.Mod;
+                        }
+                    }
+
+                    sub = sub.Substring("CapsRes/".Length);
+                    norm = sub;
+                    if (sub.StartsWith("dist/"))
+                    {
+                        sub = sub.Substring("dist/".Length);
+                        index = sub.IndexOf('/');
+                        if (index > 0)
+                        {
+                            dist = sub.Substring(0, index);
+                            norm = sub.Substring(index + 1);
+                        }
+                    }
+                }
+                else
+                {
+                    if (asset.StartsWith("Assets/CapsRes/"))
+                    {
+                        mod = "";
+                        var sub = asset.Substring("Assets/CapsRes/".Length);
+                        norm = sub;
+                        if (sub.StartsWith("dist/"))
+                        {
+                            sub = sub.Substring("dist/".Length);
+                            var index = sub.IndexOf('/');
+                            if (index > 0)
+                            {
+                                dist = sub.Substring(0, index);
+                                norm = sub.Substring(index + 1);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(norm))
+                {
+                    continue;
+                }
+                mod = mod ?? "";
+                dist = dist ?? "";
+
+                var type = AssetDatabase.GetMainAssetTypeAtPath(asset);
+                if (type == null)
+                {
+                    Debug.LogErrorFormat("{0} is unknown type. Missing Script?", asset);
+                }
+                else
+                {
+                    if (ReflectHelper.IsEditorOnlyCached(type))
+                    {
+                        Debug.LogErrorFormat("{0} is Editor Only. ({1})", asset, type);
+                    }
+                }
+            }
+        }
+
+        [UnityEditor.MenuItem("Test/Res/Show Selected Type", priority = 400020)]
+        public static void ShowSelectedCate()
+        {
+            var selection = Selection.assetGUIDs[0];
+            var path = AssetDatabase.GUIDToAssetPath(selection);
+            Debug.LogError(AssetDatabase.GetMainAssetTypeAtPath(path));
+        }
+
+        [UnityEditor.MenuItem("Test/Res/Show Editor Only Types", priority = 400030)]
+        public static void ShowEditorOnlyTypes()
+        {
+            var types = ReflectHelper.GetEditorOnlyTypes();
+            foreach (var type in types)
+            {
+                Debug.LogErrorFormat("{0} is Editor Only.", type);
+            }
+        }
+    }
+}
+#endregion
+#endif
+#endif
