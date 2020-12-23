@@ -32,7 +32,7 @@ namespace Capstones.UnityEditorEx
                 {
                     if (System.IO.File.Exists(Path))
                     {
-                        Asm = AssemblyDefinition.ReadAssembly(Path);
+                        Asm = AssemblyDefinition.ReadAssembly(Path, _AssemblyReaderParameters);
                     }
                 }
             }
@@ -54,8 +54,59 @@ namespace Capstones.UnityEditorEx
                     Dirty = false;
                 }
             }
+            protected internal void WriteTempFile()
+            {
+                if (Asm != null)
+                {
+                    if (Dirty)
+                    {
+                        Asm.Write(Path + ".tmp");
+                    }
+                    Dirty = false;
+                }
+            }
+            protected internal void MoveTempFile()
+            {
+                if (System.IO.File.Exists(Path + ".tmp"))
+                {
+                    System.IO.File.Delete(Path);
+                    System.IO.File.Move(Path + ".tmp", Path);
+                }
+            }
         }
         private static Dictionary<string, LoadedAssembly> _LoadedAsms = new Dictionary<string, LoadedAssembly>();
+        private class AssemblyResolver : BaseAssemblyResolver
+        {
+            private DefaultAssemblyResolver _defaultResolver;
+
+            public AssemblyResolver()
+            {
+                _defaultResolver = new DefaultAssemblyResolver();
+            }
+
+            public override AssemblyDefinition Resolve(AssemblyNameReference name)
+            {
+                AssemblyDefinition assembly = null;
+                try
+                {
+                    assembly = _defaultResolver.Resolve(name);
+                }
+                catch (AssemblyResolutionException)
+                {
+                    LoadedAssembly loaded;
+                    if (_LoadedAsms.TryGetValue(name.Name, out loaded))
+                    {
+                        assembly = loaded.Asm;
+                    }
+                }
+                return assembly;
+            }
+        }
+        private static AssemblyResolver _AssemblyResolver = new AssemblyResolver();
+        private static ReaderParameters _AssemblyReaderParameters = new ReaderParameters()
+        {
+            AssemblyResolver = _AssemblyResolver,
+        };
 
         private static string _AssembliesDirectory;
         public static string AssembliesDirectory
@@ -148,7 +199,15 @@ namespace Capstones.UnityEditorEx
         {
             foreach (var kvp in _LoadedAsms)
             {
+                kvp.Value.WriteTempFile();
+            }
+            foreach (var kvp in _LoadedAsms)
+            {
                 kvp.Value.Dispose();
+            }
+            foreach (var kvp in _LoadedAsms)
+            {
+                kvp.Value.MoveTempFile();
             }
             _LoadedAsms.Clear();
         }
@@ -1177,7 +1236,9 @@ namespace Capstones.UnityEditorEx
                     var ins = method.Body.Instructions[i];
                     if (ins.OpCode == OpCodes.Ret)
                     {
-                        emitter.Replace(ins, emitter.Create(OpCodes.Br, postStart));
+                        ins.OpCode = OpCodes.Br;
+                        ins.Operand = postStart;
+                        //emitter.Replace(ins, emitter.Create(OpCodes.Br, postStart));
                     }
                 }
             }
