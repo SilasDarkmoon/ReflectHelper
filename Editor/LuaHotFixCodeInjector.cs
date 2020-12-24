@@ -514,6 +514,8 @@ namespace Capstones.UnityEditorEx
                     var voidType = luadll.MainModule.TypeSystem.Void;
                     var intType = luadll.MainModule.TypeSystem.Int32;
                     var intPtrType = luadll.MainModule.TypeSystem.IntPtr;
+                    var typeType = new TypeReference("System", "Type", intType.Module, intType.Scope);
+                    var typeHandleType = new TypeReference("System", "RuntimeTypeHandle", intType.Module, intType.Scope) { IsValueType = true };
                     var injecttype = new TypeDefinition("Capstones.LuaWrap", "LuaPack`" + paramCnt, TypeAttributes.Public | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit, valueType);
                     injecttype.Interfaces.Add(new InterfaceImplementation(luadll.MainModule.GetType("Capstones.LuaWrap.ILuaPack")));
                     { // attributes
@@ -541,6 +543,11 @@ namespace Capstones.UnityEditorEx
                     { // _IndexAccessors
                         var iafield = new FieldDefinition("_IndexAccessors", FieldAttributes.Private | FieldAttributes.Static, indexerListType);
                         injecttype.Fields.Add(iafield);
+                    }
+                    var etfieldtype = new ArrayType(typeType);
+                    { // ElementTypes
+                        var etfield = new FieldDefinition("ElementTypes", FieldAttributes.Private | FieldAttributes.Static, etfieldtype);
+                        injecttype.Fields.Add(etfield);
                     }
                     GenericInstanceType indexerRef;
                     { // Intermediate class for _IndexAccessors
@@ -642,6 +649,21 @@ namespace Capstones.UnityEditorEx
                             emitter.Emit(OpCodes.Callvirt, addMethod);
                         }
                         emitter.Emit(OpCodes.Stsfld, new FieldReference("_IndexAccessors", indexerListType, selfType));
+
+                        emitter.Emit(OpCodes.Ldc_I4, paramCnt);
+                        emitter.Emit(OpCodes.Newarr, typeType);
+                        for (int i = 0; i < paramCnt; ++i)
+                        {
+                            emitter.Emit(OpCodes.Dup);
+                            emitter.Emit(OpCodes.Ldc_I4, i);
+                            emitter.Emit(OpCodes.Ldtoken, injecttype.GenericParameters[i]);
+                            var typeofMethod = new MethodReference("GetTypeFromHandle", typeType, typeType) { HasThis = false };
+                            typeofMethod.Parameters.Add(new ParameterDefinition(typeHandleType));
+                            emitter.Emit(OpCodes.Call, typeofMethod);
+                            emitter.Emit(OpCodes.Stelem_Ref);
+                        }
+                        emitter.Emit(OpCodes.Stsfld, new FieldReference("ElementTypes", etfieldtype, selfType));
+
                         emitter.Emit(OpCodes.Ret);
                         injecttype.Methods.Add(cctor);
                     }
@@ -737,9 +759,9 @@ namespace Capstones.UnityEditorEx
                         emitter.Emit(OpCodes.Ret);
                         injecttype.Methods.Add(func);
                     }
-                    { // ElementCount
-                        var prop = new PropertyDefinition("ElementCount", PropertyAttributes.None, intType);
-                        var getter = prop.GetMethod = new MethodDefinition("get_ElementCount", MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.NewSlot | MethodAttributes.Virtual | MethodAttributes.Final, intType);
+                    { // Length
+                        var prop = new PropertyDefinition("Length", PropertyAttributes.None, intType);
+                        var getter = prop.GetMethod = new MethodDefinition("get_Length", MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.NewSlot | MethodAttributes.Virtual | MethodAttributes.Final, intType);
                         var emitter = getter.Body.GetILProcessor();
                         emitter.Emit(OpCodes.Ldc_I4_S, (sbyte)paramCnt);
                         emitter.Emit(OpCodes.Ret);
@@ -780,6 +802,16 @@ namespace Capstones.UnityEditorEx
                             emitter.Emit(OpCodes.Ret);
                             injecttype.Methods.Add(setter);
                         }
+                    }
+                    { // GetType(index)
+                        var func = new MethodDefinition("GetType", MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.NewSlot | MethodAttributes.Virtual | MethodAttributes.Final, typeType);
+                        func.Parameters.Add(new ParameterDefinition("index", ParameterAttributes.None, intType));
+                        var emitter = func.Body.GetILProcessor();
+                        emitter.Emit(OpCodes.Ldsfld, new FieldReference("ElementTypes", etfieldtype, selfType));
+                        emitter.Emit(OpCodes.Ldarg_1);
+                        emitter.Emit(OpCodes.Ldelem_Ref);
+                        emitter.Emit(OpCodes.Ret);
+                        injecttype.Methods.Add(func);
                     }
 
                     MarkDirty("CapsLua");
