@@ -579,16 +579,16 @@ namespace Capstones.UnityEditorEx
                 if (existing == null)
                 {
                     var objectType = luadll.MainModule.TypeSystem.Object;
-                    var valueType = new TypeReference("System", "ValueType", luadll.MainModule, objectType.Scope);
+                    var valueType = new TypeReference("System", "ValueType", objectType.Module, objectType.Scope);
                     var voidType = luadll.MainModule.TypeSystem.Void;
                     var intType = luadll.MainModule.TypeSystem.Int32;
                     var intPtrType = luadll.MainModule.TypeSystem.IntPtr;
-                    var typeType = new TypeReference("System", "Type", intType.Module, intType.Scope);
-                    var typeHandleType = new TypeReference("System", "RuntimeTypeHandle", intType.Module, intType.Scope) { IsValueType = true };
+                    var typeType = new TypeReference("System", "Type", objectType.Module, objectType.Scope);
+                    var typeHandleType = new TypeReference("System", "RuntimeTypeHandle", objectType.Module, objectType.Scope) { IsValueType = true };
                     var injecttype = new TypeDefinition("Capstones.LuaWrap", "LuaPack`" + paramCnt, TypeAttributes.Public | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit, valueType);
                     injecttype.Interfaces.Add(new InterfaceImplementation(luadll.MainModule.GetType("Capstones.LuaWrap.ILuaPack")));
                     { // attributes
-                        var defaultMemberCtor = new MethodReference(".ctor", voidType, new TypeReference("System.Reflection", "DefaultMemberAttribute", luadll.MainModule, objectType.Scope)) { HasThis = true };
+                        var defaultMemberCtor = new MethodReference(".ctor", voidType, new TypeReference("System.Reflection", "DefaultMemberAttribute", objectType.Module, objectType.Scope)) { HasThis = true };
                         defaultMemberCtor.Parameters.Add(new ParameterDefinition(luadll.MainModule.TypeSystem.String));
                         var defaultMemberAttr = new CustomAttribute(defaultMemberCtor);
                         defaultMemberAttr.ConstructorArguments.Add(new CustomAttributeArgument(luadll.MainModule.TypeSystem.String, "Item"));
@@ -1432,11 +1432,13 @@ namespace Capstones.UnityEditorEx
             Dictionary<string, TypeDefinition> typeCache = new Dictionary<string, TypeDefinition>();
             if (searchAttribute)
             {
-                foreach (var loaded in _LoadedAsms)
+                var allasms = new List<LoadedAssembly>(_LoadedAsms.Values);
+                for (int i = 0; i < allasms.Count; ++i)
                 {
-                    if (!luadeps.Contains(loaded.Key) && loaded.Value != null && loaded.Value.Asm != null)
+                    var asm = allasms[i];
+                    if (asm != null && asm.Asm != null && !luadeps.Contains(asm.Asm.Name.Name))
                     {
-                        var methods = GetHotFixMethods(loaded.Value.Asm);
+                        var methods = GetHotFixMethods(asm.Asm);
                         foreach (var method in methods)
                         {
                             var typestr = ReflectAnalyzer.GetIDString(method.DeclaringType);
@@ -1444,7 +1446,7 @@ namespace Capstones.UnityEditorEx
                             if (memberset.Add(token))
                             {
                                 typeCache[typestr] = method.DeclaringType;
-                                AddWork(rv, loaded.Key, typestr, method);
+                                AddWork(rv, asm.Asm.Name.Name, typestr, method);
                             }
                         }
                     }
