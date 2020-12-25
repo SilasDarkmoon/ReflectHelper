@@ -98,6 +98,24 @@ namespace Capstones.UnityEditorEx
                     {
                         assembly = loaded.Asm;
                     }
+                    else
+                    {
+                        // TryLoad From AssembliesDirectory
+                        assembly = LoadAssembly(name.Name);
+                        if (assembly == null)
+                        {
+                            // the UnityEngine.dll ?
+                            string path;
+                            if (InternalAssemblies.TryGetValue(name.Name, out path))
+                            {
+                                try
+                                {
+                                    assembly = LoadAssembly(path);
+                                }
+                                catch { }
+                            }
+                        }
+                    }
                 }
                 return assembly;
             }
@@ -127,6 +145,34 @@ namespace Capstones.UnityEditorEx
                     _AssembliesDirectory = value;
                 }
             }
+        }
+        public static readonly Dictionary<string, string> InternalAssemblies = new Dictionary<string, string>();
+        public static void LoadInternalAssemblies()
+        {
+            InternalAssemblies.Clear();
+            var names = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyNames();
+            for (int i = 0; i < names.Length; ++i)
+            {
+                var asmname = names[i];
+                var path = UnityEditor.Compilation.CompilationPipeline.GetPrecompiledAssemblyPathFromAssemblyName(asmname);
+                InternalAssemblies[asmname] = path;
+            }
+            var allunityasms = UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.PlayerWithoutTestAssemblies);
+            for (int i = 0; i < allunityasms.Length; ++i)
+            {
+                var uasm = allunityasms[i];
+                var refs = uasm.allReferences;
+                for (int j = 0; j < refs.Length; ++j)
+                {
+                    var r = refs[j];
+                    var name = System.IO.Path.GetFileNameWithoutExtension(r);
+                    InternalAssemblies[name] = r;
+                }
+            }
+        }
+        static LuaHotFixCodeInjector()
+        {
+            LoadInternalAssemblies();
         }
 
         internal static AssemblyDefinition GetAssembly(string name)
@@ -197,17 +243,20 @@ namespace Capstones.UnityEditorEx
         }
         public static void UnloadAssemblies()
         {
-            foreach (var kvp in _LoadedAsms)
+            var assemblies = new List<LoadedAssembly>(_LoadedAsms.Values);
+            for (int i = 0; i < assemblies.Count; ++i)
             {
-                kvp.Value.WriteTempFile();
+                assemblies[i].WriteTempFile();
             }
-            foreach (var kvp in _LoadedAsms)
+            assemblies.Clear();
+            assemblies.AddRange(_LoadedAsms.Values);
+            for (int i = 0; i < assemblies.Count; ++i)
             {
-                kvp.Value.Dispose();
+                assemblies[i].Dispose();
             }
-            foreach (var kvp in _LoadedAsms)
+            for (int i = 0; i < assemblies.Count; ++i)
             {
-                kvp.Value.MoveTempFile();
+                assemblies[i].MoveTempFile();
             }
             _LoadedAsms.Clear();
         }
@@ -226,6 +275,26 @@ namespace Capstones.UnityEditorEx
         #endregion
 
         #region Mono.Cecil Extensions
+        internal static bool IsSubclassOf(this TypeReference thisType, string baseTypeFullName)
+        {
+            var curType = thisType;
+            while (curType != null)
+            {
+                if (curType.FullName == baseTypeFullName)
+                {
+                    return true;
+                }
+                try
+                {
+                    curType = curType.Resolve().BaseType;
+                }
+                catch
+                {
+                    curType = null;
+                }
+            }
+            return false;
+        }
         internal static MethodReference GetReference(this MethodDefinition method, GenericInstanceType type)
         {
             MethodReference mref = new MethodReference(method.Name, method.ReturnType, type);
@@ -1324,6 +1393,18 @@ namespace Capstones.UnityEditorEx
 
         internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, string asm, string typestr, MethodDefinition method)
         {
+            // we do the filter here.
+            // 1. we only inject public methods
+            if (!method.IsPublic)
+            {
+                return works;
+            }
+            // 2. Ignore ctor of UnityEngine.Object
+            if (method.IsConstructor && !method.IsStatic && method.DeclaringType.IsSubclassOf("UnityEngine.Object"))
+            {
+                return works;
+            }
+
             Dictionary<string, List<MethodDefinition>> typedict;
             if (!works.TryGetValue(asm, out typedict))
             {
