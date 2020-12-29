@@ -1217,17 +1217,18 @@ namespace Capstones.UnityEditorEx
             Instruction bodyStart = method.Body.Instructions[0];
 
             { // Post parts
+                if (shouldReturnVal)
+                {
+                    PostParts.Add(emitter.Create(OpCodes.Stloc, rvvar));
+                }
+                if (PostInArgs.Count > 0)
                 { // ctor for pivar
-                    if (shouldReturnVal)
-                    {
-                        PostParts.Add(emitter.Create(OpCodes.Stloc, rvvar));
-                    }
+                    PostParts.Add(emitter.Create(OpCodes.Ldloca, pivar));
                     var ictor = new MethodReference(".ctor", luadll.MainModule.TypeSystem.Void, pitype) { HasThis = true };
                     for (int i = 0; i < PostInArgs.Count; ++i)
                     {
                         ictor.Parameters.Add(new ParameterDefinition(pideftype.GenericParameters[i]));
                     }
-                    PostParts.Add(emitter.Create(OpCodes.Ldloca, pivar));
                     for (int i = 0; i < PostInArgs.Count; ++i)
                     {
                         var argindex = PostInArgs[i];
@@ -1287,13 +1288,14 @@ namespace Capstones.UnityEditorEx
             }
 
             { // Pre parts
+                if (InArgs.Count > 0)
                 { // ctor for ivar
+                    PreParts.Add(emitter.Create(OpCodes.Ldloca, ivar));
                     var ictor = new MethodReference(".ctor", luadll.MainModule.TypeSystem.Void, itype) { HasThis = true };
                     for (int i = 0; i < InArgs.Count; ++i)
                     {
                         ictor.Parameters.Add(new ParameterDefinition(ideftype.GenericParameters[i]));
                     }
-                    PreParts.Add(emitter.Create(OpCodes.Ldloca, ivar));
                     for (int i = 0; i < InArgs.Count; ++i)
                     {
                         var argindex = InArgs[i];
@@ -1357,6 +1359,19 @@ namespace Capstones.UnityEditorEx
                     emitter.Append(ins);
                 }
             }
+
+            //{ // fix ret to br
+            //    var lastins = method.Body.Instructions[method.Body.Instructions.Count - 1];
+            //    for (int i = 0; i < method.Body.Instructions.Count - 1; ++i)
+            //    {
+            //        var ins = method.Body.Instructions[i];
+            //        if (ins.OpCode == OpCodes.Ret)
+            //        {
+            //            ins.OpCode = OpCodes.Br;
+            //            ins.Operand = lastins;
+            //        }
+            //    }
+            //}
 
             List<Instruction> insToDelete = new List<Instruction>();
             { // delete br to next
