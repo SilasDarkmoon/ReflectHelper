@@ -42,14 +42,14 @@ namespace Capstones.UnityEditorEx
                 {
                     if (Dirty)
                     {
-                        Asm.Write(Path + ".tmp");
+                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = true });
                     }
                     Asm.Dispose();
                     Asm = null;
                     if (Dirty)
                     {
                         System.IO.File.Delete(Path);
-                        System.IO.File.Move(Path + ".tmp", Path);
+                        System.IO.File.Move(Path + "-tmp", Path);
                     }
                     Dirty = false;
                 }
@@ -60,17 +60,17 @@ namespace Capstones.UnityEditorEx
                 {
                     if (Dirty)
                     {
-                        Asm.Write(Path + ".tmp");
+                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = true });
                     }
                     Dirty = false;
                 }
             }
             protected internal void MoveTempFile()
             {
-                if (System.IO.File.Exists(Path + ".tmp"))
+                if (System.IO.File.Exists(Path + "-tmp"))
                 {
                     System.IO.File.Delete(Path);
-                    System.IO.File.Move(Path + ".tmp", Path);
+                    System.IO.File.Move(Path + "-tmp", Path);
                 }
             }
         }
@@ -124,6 +124,7 @@ namespace Capstones.UnityEditorEx
         private static ReaderParameters _AssemblyReaderParameters = new ReaderParameters()
         {
             AssemblyResolver = _AssemblyResolver,
+            ReadSymbols = true,
         };
 
         private static string _AssembliesDirectory;
