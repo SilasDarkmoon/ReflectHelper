@@ -19,6 +19,7 @@ namespace Capstones.UnityEditorEx
             public AssemblyDefinition Asm;
             public string Path;
             public bool Dirty;
+            public bool NoPdb;
 
             public LoadedAssembly(string path)
             {
@@ -32,7 +33,15 @@ namespace Capstones.UnityEditorEx
                 {
                     if (System.IO.File.Exists(Path))
                     {
-                        Asm = AssemblyDefinition.ReadAssembly(Path, _AssemblyReaderParameters);
+                        try
+                        {
+                            Asm = AssemblyDefinition.ReadAssembly(Path, _AssemblyReaderParameters);
+                        }
+                        catch (SymbolsNotFoundException)
+                        {
+                            NoPdb = true;
+                            Asm = AssemblyDefinition.ReadAssembly(Path, _AssemblyReaderParameters_NoPdb);
+                        }
                     }
                 }
             }
@@ -42,7 +51,7 @@ namespace Capstones.UnityEditorEx
                 {
                     if (Dirty)
                     {
-                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = true });
+                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = !NoPdb });
                     }
                     Asm.Dispose();
                     Asm = null;
@@ -60,7 +69,7 @@ namespace Capstones.UnityEditorEx
                 {
                     if (Dirty)
                     {
-                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = true });
+                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = !NoPdb });
                     }
                     Dirty = false;
                 }
@@ -112,7 +121,10 @@ namespace Capstones.UnityEditorEx
                                 {
                                     assembly = LoadAssembly(path);
                                 }
-                                catch { }
+                                catch (Exception e)
+                                {
+                                    UnityEngine.Debug.LogException(e);
+                                }
                             }
                         }
                     }
@@ -125,6 +137,11 @@ namespace Capstones.UnityEditorEx
         {
             AssemblyResolver = _AssemblyResolver,
             ReadSymbols = true,
+        };
+        private static ReaderParameters _AssemblyReaderParameters_NoPdb = new ReaderParameters()
+        {
+            AssemblyResolver = _AssemblyResolver,
+            ReadSymbols = false,
         };
 
         private static string _AssembliesDirectory;
