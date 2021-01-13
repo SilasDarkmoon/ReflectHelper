@@ -1416,6 +1416,17 @@ namespace Capstones.UnityEditorEx
                         {
                             ins.Operand = dins.Next;
                         }
+                        else if (ins.Operand is IList)
+                        {
+                            var operands = ins.Operand as IList;
+                            for (int j = 0; j < operands.Count; ++j)
+                            {
+                                if (operands[j] == dins)
+                                {
+                                    operands[j] = dins.Next;
+                                }
+                            }
+                        }
                     }
                     emitter.Remove(dins);
                 }
