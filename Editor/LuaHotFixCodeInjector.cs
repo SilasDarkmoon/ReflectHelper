@@ -1474,7 +1474,64 @@ namespace Capstones.UnityEditorEx
                 }
             }
 
+            // replace invalid ShortInlineBrTarget to InlineBrTarget
+            FixInvalidShortBr(method);
+
             MarkDirty(method.Module.Assembly.Name.Name);
+        }
+
+        internal static void CalculateInstructionOffsets(this MethodDefinition method)
+        {
+            int offset = 0;
+            for (int i = 0; i < method.Body.Instructions.Count; ++i)
+            {
+                var ins = method.Body.Instructions[i];
+                ins.Offset = offset;
+                offset += ins.GetSize();
+            }
+        }
+        internal static Dictionary<OpCode, OpCode> _ShortBrToNormalBr = new Dictionary<OpCode, OpCode>()
+        {
+            { OpCodes.Beq_S, OpCodes.Beq },
+            { OpCodes.Bge_S, OpCodes.Bge },
+            { OpCodes.Bge_Un_S, OpCodes.Bge_Un },
+            { OpCodes.Bgt_S, OpCodes.Bgt },
+            { OpCodes.Bgt_Un_S, OpCodes.Bgt_Un },
+            { OpCodes.Ble_S, OpCodes.Ble },
+            { OpCodes.Ble_Un_S, OpCodes.Ble_Un },
+            { OpCodes.Blt_S, OpCodes.Blt },
+            { OpCodes.Blt_Un_S, OpCodes.Blt_Un },
+            { OpCodes.Bne_Un_S, OpCodes.Bne_Un },
+            { OpCodes.Brfalse_S, OpCodes.Brfalse },
+            { OpCodes.Brtrue_S, OpCodes.Brtrue },
+            { OpCodes.Br_S, OpCodes.Br },
+            { OpCodes.Leave_S, OpCodes.Leave },
+        };
+        internal static bool FixInvalidShortBrStep(this MethodDefinition method)
+        {
+            CalculateInstructionOffsets(method);
+            for (int i = 0; i < method.Body.Instructions.Count; ++i)
+            {
+                var ins = method.Body.Instructions[i];
+                if (ins.OpCode.OperandType == OperandType.ShortInlineBrTarget && _ShortBrToNormalBr.ContainsKey(ins.OpCode))
+                {
+                    var operand = ins.Operand as Instruction;
+                    if (operand != null)
+                    {
+                        var offset = operand.Offset - (ins.Offset + ins.GetSize());
+                        if (offset > sbyte.MaxValue || offset < sbyte.MinValue)
+                        {
+                            ins.OpCode = _ShortBrToNormalBr[ins.OpCode];
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+        internal static void FixInvalidShortBr(this MethodDefinition method)
+        {
+            while (FixInvalidShortBrStep(method)) ;
         }
 
         internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, string asm, string typestr, MethodDefinition method)
@@ -1485,7 +1542,12 @@ namespace Capstones.UnityEditorEx
             {
                 return works;
             }
-            // 2. Ignore ctor of UnityEngine.Object
+            // 2. the method must have body
+            if (!method.HasBody)
+            {
+                return works;
+            }
+            // 3. Ignore ctor of UnityEngine.Object
             if (method.IsConstructor && !method.IsStatic && method.DeclaringType.IsSubclassOf("UnityEngine.Object"))
             {
                 return works;
