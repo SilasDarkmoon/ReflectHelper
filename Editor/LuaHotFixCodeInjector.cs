@@ -1428,6 +1428,48 @@ namespace Capstones.UnityEditorEx
                             }
                         }
                     }
+                    if (method.Body.HasExceptionHandlers)
+                    {
+                        for (int i = 0; i < method.Body.ExceptionHandlers.Count; ++i)
+                        {
+                            var exhandler = method.Body.ExceptionHandlers[i];
+                            if (exhandler.TryStart != null)
+                            {
+                                if (exhandler.TryStart == dins)
+                                {
+                                    exhandler.TryStart = dins.Next;
+                                }
+                            }
+                            if (exhandler.TryEnd != null)
+                            {
+                                if (exhandler.TryEnd == dins)
+                                {
+                                    exhandler.TryEnd = dins.Next;
+                                }
+                            }
+                            if (exhandler.FilterStart != null)
+                            {
+                                if (exhandler.FilterStart == dins)
+                                {
+                                    exhandler.FilterStart = dins.Next;
+                                }
+                            }
+                            if (exhandler.HandlerStart != null)
+                            {
+                                if (exhandler.HandlerStart == dins)
+                                {
+                                    exhandler.HandlerStart = dins.Next;
+                                }
+                            }
+                            if (exhandler.HandlerEnd != null)
+                            {
+                                if (exhandler.HandlerEnd == dins)
+                                {
+                                    exhandler.HandlerEnd = dins.Next;
+                                }
+                            }
+                        }
+                    }
                     emitter.Remove(dins);
                 }
             }
