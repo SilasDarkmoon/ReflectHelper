@@ -308,6 +308,12 @@ namespace Capstones.UnityEditorEx
                 }
             }
         }
+
+        private static string[] _ForbiddenNamespaces = new []
+        {
+            "UnityEngine.Windows",
+        };
+
         private static void ParseTypeMemberList(List<string> members, TypeDefinition type)
         {
             if (!type.IsNestedPublic && !type.IsPublic)
@@ -334,6 +340,18 @@ namespace Capstones.UnityEditorEx
             if (obsoleted)
             {
                 return;
+            }
+            if (type.Namespace != null)
+            {
+                for (int i = 0; i < _ForbiddenNamespaces.Length; ++i)
+                {
+                    var fns = _ForbiddenNamespaces[i];
+                    var ns = type.Namespace;
+                    if (ns == fns || ns.Length > fns.Length && ns.StartsWith(fns) && ns[fns.Length] == '.')
+                    {
+                        return;
+                    }
+                }
             }
 
             var line = "type " + type.GetIDString();
