@@ -117,7 +117,11 @@ namespace Capstones.UnityEditorEx
                                         sb.Append(rtype.GetIDString());
                                         sb.Append(" ");
                                         sb.Append(member.GetIDString());
-                                        list.Add(sb.ToString());
+                                        var rsig = sb.ToString();
+                                        if (uniqueset.Add(rsig))
+                                        {
+                                            list.Add(rsig);
+                                        }
                                     }
                                 }
                             }
