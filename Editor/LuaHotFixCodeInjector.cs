@@ -1227,6 +1227,25 @@ namespace Capstones.UnityEditorEx
                 method.Body.Variables.Add(rvvar);
             }
             var emitter = method.Body.GetILProcessor();
+            if (!shouldReturnVal)
+            {
+                if (method.Body.Instructions.Count == 0)
+                { // add a ret
+                    method.Body.Instructions.Add(emitter.Create(OpCodes.Ret));
+                }
+            }
+            bool hasRet = false; // if there is only one throw op and the method should return something, the stack will not have the return value before the method ends.
+            {
+                for (int i = 0; i < method.Body.Instructions.Count; ++i)
+                {
+                    var ins = method.Body.Instructions[i];
+                    if (ins.OpCode == OpCodes.Ret)
+                    {
+                        hasRet = true;
+                        break;
+                    }
+                }
+            }
 
             List<Instruction> PreParts = new List<Instruction>();
             List<Instruction> PostParts = new List<Instruction>();
@@ -1237,7 +1256,10 @@ namespace Capstones.UnityEditorEx
             { // Post parts
                 if (shouldReturnVal)
                 {
-                    PostParts.Add(emitter.Create(OpCodes.Stloc, rvvar));
+                    if (hasRet)
+                    { 
+                        PostParts.Add(emitter.Create(OpCodes.Stloc, rvvar));
+                    }
                 }
                 if (PostInArgs.Count > 0)
                 { // ctor for pivar
