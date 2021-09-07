@@ -911,21 +911,26 @@ namespace Capstones.UnityEditorEx
         #endregion
 
         #region HotFix Token Hash
+        private static Dictionary<string, long> _CachedTokenHash;
+        private static Dictionary<long, string> _HashToHotFixToken;
         public static Dictionary<string, long> DesignatedHash;
-        public static Dictionary<long, string> HashToHotFixToken;
         public static void LoadDesignatedHash(Dictionary<string, long> hashmap)
         {
             if (hashmap == null)
             {
                 DesignatedHash = null;
-                HashToHotFixToken = null;
+                _CachedTokenHash = null;
+                _HashToHotFixToken = null;
             }
             else
             {
                 DesignatedHash = hashmap;
+                _CachedTokenHash = new Dictionary<string, long>();
+                _HashToHotFixToken = new Dictionary<long, string>();
                 foreach (var kvp in hashmap)
                 {
-                    HashToHotFixToken[kvp.Value] = kvp.Key;
+                    _CachedTokenHash[kvp.Key] = kvp.Value;
+                    _HashToHotFixToken[kvp.Value] = kvp.Key;
                 }
             }
         }
@@ -945,7 +950,7 @@ namespace Capstones.UnityEditorEx
             }
 
             long hash = 0;
-            if (DesignatedHash == null || !DesignatedHash.TryGetValue(mainpart, out hash))
+            if (_CachedTokenHash == null || !_CachedTokenHash.TryGetValue(mainpart, out hash))
             {
                 int criticalindex = mainpart.IndexOf(' ');
                 if (criticalindex >= 0 && criticalindex + 1 < mainpart.Length)
@@ -957,27 +962,32 @@ namespace Capstones.UnityEditorEx
                     criticalindex = -1;
                 }
                 hash = ExtendedStringHash.GetHashCodeEx(mainpart, 0, 1, criticalindex, 0);
-                if (DesignatedHash == null)
+                if (_CachedTokenHash == null)
                 {
-                    DesignatedHash = new Dictionary<string, long>();
+                    _CachedTokenHash = new Dictionary<string, long>();
                 }
-                DesignatedHash[mainpart] = hash;
+                _CachedTokenHash[mainpart] = hash;
             }
             string existingtoken;
-            while (HashToHotFixToken != null && HashToHotFixToken.TryGetValue(hash, out existingtoken) && existingtoken != mainpart)
+            while (_HashToHotFixToken != null && _HashToHotFixToken.TryGetValue(hash, out existingtoken) && existingtoken != mainpart)
             {
                 ++hash;
+                if (_CachedTokenHash == null)
+                {
+                    _CachedTokenHash = new Dictionary<string, long>();
+                }
+                _CachedTokenHash[mainpart] = hash;
                 if (DesignatedHash == null)
                 {
                     DesignatedHash = new Dictionary<string, long>();
                 }
                 DesignatedHash[mainpart] = hash;
             }
-            if (HashToHotFixToken == null)
+            if (_HashToHotFixToken == null)
             {
-                HashToHotFixToken = new Dictionary<long, string>();
+                _HashToHotFixToken = new Dictionary<long, string>();
             }
-            HashToHotFixToken[hash] = mainpart;
+            _HashToHotFixToken[hash] = mainpart;
             if (istail)
             {
                 hash = -hash;
