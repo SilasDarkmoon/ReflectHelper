@@ -481,6 +481,7 @@ namespace Capstones.UnityEditorEx
         //}
         #endregion
 
+        #region Extra Generators
         public static void GenerateByRefUtils()
         {
             var compiler = new Microsoft.CSharp.CSharpCodeProvider();
@@ -907,6 +908,83 @@ namespace Capstones.UnityEditorEx
                 return existing;
             }
         }
+        #endregion
+
+        #region HotFix Token Hash
+        public static Dictionary<string, long> DesignatedHash;
+        public static Dictionary<long, string> HashToHotFixToken;
+        public static void LoadDesignatedHash(Dictionary<string, long> hashmap)
+        {
+            if (hashmap == null)
+            {
+                DesignatedHash = null;
+                HashToHotFixToken = null;
+            }
+            else
+            {
+                DesignatedHash = hashmap;
+                foreach (var kvp in hashmap)
+                {
+                    HashToHotFixToken[kvp.Value] = kvp.Key;
+                }
+            }
+        }
+        private static long GetTokenHash(string token)
+        {
+            if (token == null) return 0;
+            string mainpart = token;
+            bool istail = false;
+            if (token.EndsWith(" tail"))
+            {
+                istail = true;
+                mainpart = token.Substring(0, token.Length - " tail".Length);
+            }
+            else if (token.EndsWith(" head"))
+            {
+                mainpart = token.Substring(0, token.Length - " head".Length);
+            }
+
+            long hash = 0;
+            if (DesignatedHash == null || !DesignatedHash.TryGetValue(mainpart, out hash))
+            {
+                int criticalindex = mainpart.IndexOf(' ');
+                if (criticalindex >= 0 && criticalindex + 1 < mainpart.Length)
+                {
+                    ++criticalindex;
+                }
+                else
+                {
+                    criticalindex = -1;
+                }
+                hash = ExtendedStringHash.GetHashCodeEx(mainpart, 0, 1, criticalindex, 0);
+                if (DesignatedHash == null)
+                {
+                    DesignatedHash = new Dictionary<string, long>();
+                }
+                DesignatedHash[mainpart] = hash;
+            }
+            string existingtoken;
+            while (HashToHotFixToken != null && HashToHotFixToken.TryGetValue(hash, out existingtoken) && existingtoken != mainpart)
+            {
+                ++hash;
+                if (DesignatedHash == null)
+                {
+                    DesignatedHash = new Dictionary<string, long>();
+                }
+                DesignatedHash[mainpart] = hash;
+            }
+            if (HashToHotFixToken == null)
+            {
+                HashToHotFixToken = new Dictionary<long, string>();
+            }
+            HashToHotFixToken[hash] = mainpart;
+            if (istail)
+            {
+                hash = -hash;
+            }
+            return hash;
+        }
+        #endregion
 
         public static HashSet<string> GetLuaDeps()
         {
@@ -1206,7 +1284,7 @@ namespace Capstones.UnityEditorEx
             }
 
             var excallClass = luadll.MainModule.GetType("Capstones.LuaWrap.HotFixCaller");
-            var excallDef = excallClass.GetMethod("CallHotFix");
+            var excallDef = excallClass.GetMethod("CallHotFixN");
             var precallMethod = new GenericInstanceMethod(excallDef.GetReference(method.Module));
             precallMethod.GenericArguments.Add(itype);
             precallMethod.GenericArguments.Add(otype);
@@ -1286,7 +1364,7 @@ namespace Capstones.UnityEditorEx
                     PostParts.Add(emitter.Create(OpCodes.Call, ictor));
                 }
 
-                PostParts.Add(emitter.Create(OpCodes.Ldstr, token + " tail"));
+                PostParts.Add(emitter.Create(OpCodes.Ldc_I8, GetTokenHash(token + " tail")));
                 PostParts.Add(emitter.Create(OpCodes.Ldloc, pivar));
                 PostParts.Add(emitter.Create(OpCodes.Ldloca, ovar));
                 PostParts.Add(emitter.Create(OpCodes.Call, postcallMethod));
@@ -1348,7 +1426,7 @@ namespace Capstones.UnityEditorEx
                     PreParts.Add(emitter.Create(OpCodes.Call, ictor));
                 }
 
-                PreParts.Add(emitter.Create(OpCodes.Ldstr, token + " head"));
+                PreParts.Add(emitter.Create(OpCodes.Ldc_I8, GetTokenHash(token + " head")));
                 PreParts.Add(emitter.Create(OpCodes.Ldloc, ivar));
                 PreParts.Add(emitter.Create(OpCodes.Ldloca, ovar));
                 PreParts.Add(emitter.Create(OpCodes.Call, precallMethod));
