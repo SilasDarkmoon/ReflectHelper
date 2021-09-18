@@ -1138,33 +1138,42 @@ namespace Capstones.UnityEditorEx
 
                 allmember = true;
             }
-            foreach (var method in type.Methods)
+
+            HashSet<MethodDefinition> methodset = new HashSet<MethodDefinition>();
+            foreach (var prop in type.Properties)
             {
-                if (allmember || HasHotFixAttribute(method))
+                if (HasHotFixAttribute(prop))
                 {
-                    list.Add(new InjectWorkItem(method, !allmember));
+                    if (prop.GetMethod != null)
+                    {
+                        if (methodset.Add(prop.GetMethod))
+                        {
+                            list.Add(new InjectWorkItem(prop.GetMethod, true));
+                        }
+                    }
+                    if (prop.SetMethod != null)
+                    {
+                        if (methodset.Add(prop.SetMethod))
+                        {
+                            list.Add(new InjectWorkItem(prop.SetMethod, true));
+                        }
+                    }
                 }
             }
-            if (!allmember)
-            { // if allmember, the methods should already be added.
-                foreach (var prop in type.Properties)
+            foreach (var method in type.Methods)
+            {
+                if (HasHotFixAttribute(method))
                 {
-                    if (HasHotFixAttribute(prop))
+                    if (methodset.Add(method))
                     {
-                        if (prop.GetMethod != null)
-                        {
-                            if (!HasHotFixAttribute(prop.GetMethod))
-                            { // if it has this attr, it will be already added.
-                                list.Add(new InjectWorkItem(prop.GetMethod, true));
-                            }
-                        }
-                        if (prop.SetMethod != null)
-                        {
-                            if (!HasHotFixAttribute(prop.SetMethod))
-                            { // if it has this attr, it will be already added.
-                                list.Add(new InjectWorkItem(prop.SetMethod, true));
-                            }
-                        }
+                        list.Add(new InjectWorkItem(method, true));
+                    }
+                }
+                else if (allmember)
+                {
+                    if (methodset.Add(method))
+                    {
+                        list.Add(new InjectWorkItem(method, false));
                     }
                 }
             }
