@@ -1113,9 +1113,9 @@ namespace Capstones.UnityEditorEx
             return null;
         }
 
-        internal static List<MethodDefinition> GetHotFixMethods(AssemblyDefinition asm)
+        internal static List<InjectWorkItem> GetHotFixMethods(AssemblyDefinition asm)
         {
-            List<MethodDefinition> list = new List<MethodDefinition>();
+            List<InjectWorkItem> list = new List<InjectWorkItem>();
             foreach (var module in asm.Modules)
             {
                 foreach (var type in module.Types)
@@ -1125,7 +1125,7 @@ namespace Capstones.UnityEditorEx
             }
             return list;
         }
-        internal static void GetHotFixMethods(List<MethodDefinition> list, TypeDefinition type)
+        internal static void GetHotFixMethods(List<InjectWorkItem> list, TypeDefinition type)
         {
             bool allmember = false;
             if (HasHotFixAttribute(type))
@@ -1142,7 +1142,7 @@ namespace Capstones.UnityEditorEx
             {
                 if (allmember || HasHotFixAttribute(method))
                 {
-                    list.Add(method);
+                    list.Add(new InjectWorkItem(method, !allmember));
                 }
             }
             if (!allmember)
@@ -1155,14 +1155,14 @@ namespace Capstones.UnityEditorEx
                         {
                             if (!HasHotFixAttribute(prop.GetMethod))
                             { // if it has this attr, it will be already added.
-                                list.Add(prop.GetMethod);
+                                list.Add(new InjectWorkItem(prop.GetMethod, true));
                             }
                         }
                         if (prop.SetMethod != null)
                         {
                             if (!HasHotFixAttribute(prop.SetMethod))
                             { // if it has this attr, it will be already added.
-                                list.Add(prop.SetMethod);
+                                list.Add(new InjectWorkItem(prop.SetMethod, true));
                             }
                         }
                     }
@@ -1644,12 +1644,38 @@ namespace Capstones.UnityEditorEx
             while (FixInvalidShortBrStep(method)) ;
         }
 
-        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, string asm, string typestr, MethodDefinition method)
+        internal struct InjectWorkItem
         {
+            public MethodDefinition Method;
+            public bool Force;
+
+            public InjectWorkItem(MethodDefinition method)
+            {
+                Method = method;
+                Force = false;
+            }
+            public InjectWorkItem(MethodDefinition method, bool force)
+            {
+                Method = method;
+                Force = force;
+            }
+
+            public static implicit operator InjectWorkItem(MethodDefinition method)
+            {
+                return new InjectWorkItem(method);
+            }
+            public static implicit operator MethodDefinition(InjectWorkItem item)
+            {
+                return item.Method;
+            }
+        }
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, string asm, string typestr, InjectWorkItem item)
+        {
+            var method = item.Method;
             // we do the filter here.
             // 1. we only inject public methods
-            if (!method.IsPublic)
-            {
+            if (!method.IsPublic && !item.Force)
+            { // TODO: if it is private Component.Update, we should inject
                 return works;
             }
             // 2. the method must have body
@@ -1678,7 +1704,7 @@ namespace Capstones.UnityEditorEx
             list.Add(method);
             return works;
         }
-        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, MethodDefinition method)
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition >>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, MethodDefinition method)
         {
             return AddWork(works, method.Module.Assembly.Name.Name, ReflectAnalyzer.GetIDString(method.DeclaringType), method);
         }
@@ -1697,14 +1723,15 @@ namespace Capstones.UnityEditorEx
                     if (asm != null && asm.Asm != null && !luadeps.Contains(asm.Asm.Name.Name))
                     {
                         var methods = GetHotFixMethods(asm.Asm);
-                        foreach (var method in methods)
+                        foreach (var item in methods)
                         {
+                            var method = item.Method;
                             var typestr = ReflectAnalyzer.GetIDString(method.DeclaringType);
                             var token = typestr + " " + ReflectAnalyzer.GetIDString(method);
                             if (memberset.Add(token))
                             {
                                 typeCache[typestr] = method.DeclaringType;
-                                AddWork(rv, asm.Asm.Name.Name, typestr, method);
+                                AddWork(rv, asm.Asm.Name.Name, typestr, item);
                             }
                         }
                     }
@@ -1760,7 +1787,7 @@ namespace Capstones.UnityEditorEx
                                                         var token = typestr + " " + rsig;
                                                         if (memberset.Add(token))
                                                         {
-                                                            AddWork(rv, type.Module.Assembly.Name.Name, typestr, method);
+                                                            AddWork(rv, type.Module.Assembly.Name.Name, typestr, new InjectWorkItem(method, true));
                                                         }
                                                     }
                                                 }
@@ -1772,7 +1799,7 @@ namespace Capstones.UnityEditorEx
                                                         var token = typestr + " " + rsig;
                                                         if (memberset.Add(token))
                                                         {
-                                                            AddWork(rv, type.Module.Assembly.Name.Name, typestr, method);
+                                                            AddWork(rv, type.Module.Assembly.Name.Name, typestr, new InjectWorkItem(method, true));
                                                         }
                                                     }
                                                 }
@@ -1799,7 +1826,7 @@ namespace Capstones.UnityEditorEx
                                                 var method = GetMethodFromSig(type, sig);
                                                 if (method != null)
                                                 {
-                                                    AddWork(rv, type.Module.Assembly.Name.Name, typestr, method);
+                                                    AddWork(rv, type.Module.Assembly.Name.Name, typestr, new InjectWorkItem(method, true));
                                                 }
                                             }
                                         }
