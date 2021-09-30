@@ -9,7 +9,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Generator", "Generator\Gene
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ByRefUtils", "ByRefUtils\ByRefUtils.csproj", "{492C234B-FF5C-47E1-94B8-6B455EECF078}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestByRefUtils", "TestByRefUtils\TestByRefUtils.csproj", "{ACCCC8C2-A078-4EA1-9807-8FBCF49B6416}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestByRefUtils", "TestByRefUtils\TestByRefUtils.csproj", "{ACCCC8C2-A078-4EA1-9807-8FBCF49B6416}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssemblyInitializer", "AssemblyInitializer\AssemblyInitializer.csproj", "{4FDA9A0E-3258-49CD-B11E-C1756A67B402}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AssemblyInitializerGenerator", "AssemblyInitializerGenerator\AssemblyInitializerGenerator.csproj", "{F6969A14-6C77-4A34-AFD5-14933CA8432C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestAssemblyInitializer", "TestAssemblyInitializer\TestAssemblyInitializer.csproj", "{C2BEC2AD-8698-415D-B149-971445DA90ED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +39,18 @@ Global
 		{ACCCC8C2-A078-4EA1-9807-8FBCF49B6416}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ACCCC8C2-A078-4EA1-9807-8FBCF49B6416}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ACCCC8C2-A078-4EA1-9807-8FBCF49B6416}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4FDA9A0E-3258-49CD-B11E-C1756A67B402}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FDA9A0E-3258-49CD-B11E-C1756A67B402}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FDA9A0E-3258-49CD-B11E-C1756A67B402}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FDA9A0E-3258-49CD-B11E-C1756A67B402}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6969A14-6C77-4A34-AFD5-14933CA8432C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6969A14-6C77-4A34-AFD5-14933CA8432C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6969A14-6C77-4A34-AFD5-14933CA8432C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6969A14-6C77-4A34-AFD5-14933CA8432C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2BEC2AD-8698-415D-B149-971445DA90ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2BEC2AD-8698-415D-B149-971445DA90ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2BEC2AD-8698-415D-B149-971445DA90ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2BEC2AD-8698-415D-B149-971445DA90ED}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
