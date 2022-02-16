@@ -1710,10 +1710,13 @@ namespace Capstones.UnityEditorEx
                 list = new List<MethodDefinition>();
                 typedict[typestr] = list;
             }
-            list.Add(method);
+            //if (!list.Contains(method))
+            {
+                list.Add(method);
+            }
             return works;
         }
-        internal static Dictionary<string, Dictionary<string, List<MethodDefinition >>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, MethodDefinition method)
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> AddWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, MethodDefinition method)
         {
             return AddWork(works, method.Module.Assembly.Name.Name, ReflectAnalyzer.GetIDString(method.DeclaringType), method);
         }
@@ -1746,7 +1749,8 @@ namespace Capstones.UnityEditorEx
                     }
                 }
             }
-            HashSet<string> allMemberTypes = new HashSet<string>();
+            Dictionary<string, bool> allMemberTypes = new Dictionary<string, bool>();
+            Dictionary<string, System.Text.RegularExpressions.Regex> regexMemberTypes = new Dictionary<string, System.Text.RegularExpressions.Regex>();
             if (methodNames != null)
             {
                 foreach (var mname in methodNames)
@@ -1756,7 +1760,7 @@ namespace Capstones.UnityEditorEx
                         if (mname.StartsWith("type "))
                         {
                             var typestr = mname.Substring("type ".Length);
-                            allMemberTypes.Add(typestr);
+                            allMemberTypes[typestr] = false;
                         }
                         else if (mname.StartsWith("member "))
                         {
@@ -1767,7 +1771,23 @@ namespace Capstones.UnityEditorEx
                                 var sig = parts[4];
                                 if (sig == "*")
                                 {
-                                    allMemberTypes.Add(typestr);
+                                    allMemberTypes[typestr] = false;
+                                }
+                                else if (sig == "**")
+                                {
+                                    allMemberTypes[typestr] = true;
+                                }
+                                else if (sig.StartsWith("^"))
+                                {
+                                    try
+                                    {
+                                        var regex = new System.Text.RegularExpressions.Regex(sig);
+                                        regexMemberTypes[typestr] = regex;
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Debug.LogException(e);
+                                    }
                                 }
                                 else
                                 {
@@ -1846,8 +1866,9 @@ namespace Capstones.UnityEditorEx
                     }
                 }
             }
-            foreach (var typestr in allMemberTypes)
+            foreach (var kvp in allMemberTypes)
             {
+                var typestr = kvp.Key;
                 TypeDefinition type;
                 if (!typeCache.TryGetValue(typestr, out type))
                 {
@@ -1866,7 +1887,38 @@ namespace Capstones.UnityEditorEx
                         var token = typestr + " " + sig;
                         if (memberset.Add(token))
                         {
-                            AddWork(rv, type.Module.Assembly.Name.Name, typestr, method);
+                            AddWork(rv, type.Module.Assembly.Name.Name, typestr, new InjectWorkItem(method, kvp.Value));
+                        }
+                    }
+                }
+            }
+            foreach (var kvp in regexMemberTypes)
+            {
+                var typestr = kvp.Key;
+                var regex = kvp.Value;
+                TypeDefinition type;
+                if (!typeCache.TryGetValue(typestr, out type))
+                {
+                    type = GetType(typestr);
+                    if (type != null && luadeps.Contains(type.Module.Assembly.Name.Name))
+                    {
+                        type = null;
+                    }
+                    typeCache[typestr] = type;
+                }
+                if (type != null)
+                {
+                    foreach (var method in type.Methods)
+                    {
+                        var sig = ReflectAnalyzer.GetIDString(method);
+                        if (regex.IsMatch(sig))
+                        {
+                            var token = typestr + " " + sig;
+                            if (memberset.Add(token))
+                            {
+                                AddWork(rv, type.Module.Assembly.Name.Name, typestr, new InjectWorkItem(method, true));
+                            }
+
                         }
                     }
                 }
