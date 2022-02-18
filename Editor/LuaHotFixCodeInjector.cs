@@ -1189,7 +1189,48 @@ namespace Capstones.UnityEditorEx
             {
                 if (attr.AttributeType.FullName == "Capstones.LuaWrap.LuaHotFixAttribute")
                 {
+                    if (!attr.HasFields || attr.Fields == null || attr.Fields.Count == 0)
+                    {
+                        return true;
+                    }
+                    for (int i = 0; i < attr.Fields.Count; ++i)
+                    {
+                        var field = attr.Fields[i];
+                        if (field.Name == "Forbidden" && field.Argument.Value is bool)
+                        {
+                            if ((bool)field.Argument.Value)
+                            {
+                                return false;
+                            }
+                        }
+                    }
                     return true;
+                }
+            }
+            return false;
+        }
+        internal static bool HasHotFixForbiddenAttribute(this IMemberDefinition method)
+        {
+            foreach (var attr in method.CustomAttributes)
+            {
+                if (attr.AttributeType.FullName == "Capstones.LuaWrap.LuaHotFixAttribute")
+                {
+                    if (!attr.HasFields || attr.Fields == null || attr.Fields.Count == 0)
+                    {
+                        return false;
+                    }
+                    for (int i = 0; i < attr.Fields.Count; ++i)
+                    {
+                        var field = attr.Fields[i];
+                        if (field.Name == "Forbidden" && field.Argument.Value is bool)
+                        {
+                            if ((bool)field.Argument.Value)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
                 }
             }
             return false;
@@ -1923,7 +1964,249 @@ namespace Capstones.UnityEditorEx
                     }
                 }
             }
-            return rv;
+
+            return RemoveWorksInBlackList(rv, methodNames, searchAttribute);
+        }
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> RemoveWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, TypeDefinition type)
+        {
+            var asmname = type.Module.Assembly.Name.Name;
+            var typestr = ReflectAnalyzer.GetIDString(type);
+            Dictionary<string, List<MethodDefinition>> asmdict;
+            if (works.TryGetValue(asmname, out asmdict))
+            {
+                asmdict.Remove(typestr);
+            }
+            return works;
+        }
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> RemoveWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, MethodDefinition method)
+        {
+            var asmname = method.Module.Assembly.Name.Name;
+            var typestr = ReflectAnalyzer.GetIDString(method.DeclaringType);
+            Dictionary<string, List<MethodDefinition>> asmdict;
+            if (works.TryGetValue(asmname, out asmdict))
+            {
+                List<MethodDefinition> methodlist;
+                if (asmdict.TryGetValue(typestr, out methodlist))
+                {
+                    methodlist.Remove(method);
+                }
+            }
+            return works;
+        }
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> RemoveWorksInBlackList(Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, IList<string> methodNames, bool searchAttribute)
+        {
+            if (works == null)
+            {
+                return works;
+            }
+            var luadeps = LuaHotFixCodeInjector.GetLuaDeps();
+            if (searchAttribute)
+            {
+                var allasms = new List<LoadedAssembly>(_LoadedAsms.Values);
+                for (int i = 0; i < allasms.Count; ++i)
+                {
+                    var asm = allasms[i];
+                    if (asm != null && asm.Asm != null && !luadeps.Contains(asm.Asm.Name.Name))
+                    {
+                        foreach (var module in asm.Asm.Modules)
+                        {
+                            foreach (var type in module.Types)
+                            {
+                                RemoveWorksInAttibuteBlackListInType(works, type);
+                            }
+                        }
+                    }
+                }
+            }
+            Dictionary<string, TypeDefinition> typeCache = new Dictionary<string, TypeDefinition>();
+            Dictionary<string, System.Text.RegularExpressions.Regex> regexMemberTypes = new Dictionary<string, System.Text.RegularExpressions.Regex>();
+            if (methodNames != null)
+            {
+                foreach (var mname in methodNames)
+                {
+                    if (!string.IsNullOrEmpty(mname))
+                    {
+                        if (mname.StartsWith("--type "))
+                        {
+                            var typestr = mname.Substring("--type ".Length);
+                            TypeDefinition type;
+                            if (!typeCache.TryGetValue(typestr, out type))
+                            {
+                                type = GetType(typestr);
+                                if (type != null && luadeps.Contains(type.Module.Assembly.Name.Name))
+                                {
+                                    type = null;
+                                }
+                                typeCache[typestr] = type;
+                            }
+                            if (type != null)
+                            {
+                                RemoveWork(works, type);
+                            }
+                        }
+                        else if (mname.StartsWith("--member "))
+                        {
+                            var parts = mname.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            if (parts != null && parts.Length >= 5)
+                            {
+                                var typestr = parts[3];
+                                var sig = parts[4];
+                                if (sig == "*" || sig == "**")
+                                {
+                                    TypeDefinition type;
+                                    if (!typeCache.TryGetValue(typestr, out type))
+                                    {
+                                        type = GetType(typestr);
+                                        if (type != null && luadeps.Contains(type.Module.Assembly.Name.Name))
+                                        {
+                                            type = null;
+                                        }
+                                        typeCache[typestr] = type;
+                                    }
+                                    if (type != null)
+                                    {
+                                        RemoveWork(works, type);
+                                    }
+                                }
+                                else if (sig.StartsWith("^"))
+                                {
+                                    try
+                                    {
+                                        var regex = new System.Text.RegularExpressions.Regex(sig);
+                                        regexMemberTypes[typestr] = regex;
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Debug.LogException(e);
+                                    }
+                                }
+                                else
+                                {
+                                    if (parts[1] == "prop")
+                                    {
+                                        TypeDefinition type;
+                                        if (!typeCache.TryGetValue(typestr, out type))
+                                        {
+                                            type = GetType(typestr);
+                                            if (type != null && luadeps.Contains(type.Module.Assembly.Name.Name))
+                                            {
+                                                type = null;
+                                            }
+                                            typeCache[typestr] = type;
+                                        }
+                                        if (type != null)
+                                        {
+                                            var prop = GetProperty(type, sig);
+                                            if (prop != null)
+                                            {
+                                                {
+                                                    var method = prop.GetMethod;
+                                                    if (method != null)
+                                                    {
+                                                        RemoveWork(works, method);
+                                                    }
+                                                }
+                                                {
+                                                    var method = prop.SetMethod;
+                                                    if (method != null)
+                                                    {
+                                                        RemoveWork(works, method);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else if (parts[1] == "func" || parts[1] == "ctor")
+                                    {
+                                        TypeDefinition type;
+                                        if (!typeCache.TryGetValue(typestr, out type))
+                                        {
+                                            type = GetType(typestr);
+                                            if (type != null && luadeps.Contains(type.Module.Assembly.Name.Name))
+                                            {
+                                                type = null;
+                                            }
+                                            typeCache[typestr] = type;
+                                        }
+                                        if (type != null)
+                                        {
+                                            var method = GetMethodFromSig(type, sig);
+                                            if (method != null)
+                                            {
+                                                RemoveWork(works, method);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            foreach (var kvp in regexMemberTypes)
+            {
+                var typestr = kvp.Key;
+                var regex = kvp.Value;
+                TypeDefinition type;
+                if (!typeCache.TryGetValue(typestr, out type))
+                {
+                    type = GetType(typestr);
+                    if (type != null && luadeps.Contains(type.Module.Assembly.Name.Name))
+                    {
+                        type = null;
+                    }
+                    typeCache[typestr] = type;
+                }
+                if (type != null)
+                {
+                    foreach (var method in type.Methods)
+                    {
+                        var sig = ReflectAnalyzer.GetIDString(method);
+                        if (regex.IsMatch(sig))
+                        {
+                            RemoveWork(works, method);
+                        }
+                    }
+                }
+            }
+            return works;
+        }
+        internal static Dictionary<string, Dictionary<string, List<MethodDefinition>>> RemoveWorksInAttibuteBlackListInType(Dictionary<string, Dictionary<string, List<MethodDefinition>>> works, TypeDefinition type)
+        {
+            if (HasHotFixForbiddenAttribute(type))
+            {
+                RemoveWork(works, type);
+            }
+            else
+            {
+                foreach (var prop in type.Properties)
+                {
+                    if (HasHotFixForbiddenAttribute(prop))
+                    {
+                        if (prop.GetMethod != null)
+                        {
+                            RemoveWork(works, prop.GetMethod);
+                        }
+                        if (prop.SetMethod != null)
+                        {
+                            RemoveWork(works, prop.SetMethod);
+                        }
+                    }
+                }
+                foreach (var method in type.Methods)
+                {
+                    if (HasHotFixForbiddenAttribute(method))
+                    {
+                        RemoveWork(works, method);
+                    }
+                }
+                // TODO: events?
+            }
+            foreach (var ntype in type.NestedTypes)
+            {
+                RemoveWorksInAttibuteBlackListInType(works, ntype);
+            }
+            return works;
         }
         internal static List<MethodDefinition> MergeInjectWork(this Dictionary<string, Dictionary<string, List<MethodDefinition>>> works)
         {
