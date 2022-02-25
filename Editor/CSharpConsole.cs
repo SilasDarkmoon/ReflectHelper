@@ -35,6 +35,7 @@ namespace Capstones.UnityEditorEx
             "using System;",
             "using System.Collections;",
             "using System.Collections.Generic;",
+            "using System.Linq;",
             "using UnityEngine;",
             "using UnityEditor;",
             "using Capstones.UnityEngineEx;",
