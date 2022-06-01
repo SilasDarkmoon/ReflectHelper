@@ -2242,5 +2242,41 @@ namespace Capstones.UnityEditorEx
                 Inject(method);
             }
         }
+
+        public static void MarkInjected()
+        {
+            string asm1, asm2;
+            UnityAssemblyUtils.GetDefaultScriptAssemblyName(out asm1, out asm2);
+            var dll = GetOrLoadAssembly(asm1);
+            var marktype = dll.MainModule.GetType("<Indicator_Injected>");
+            if (marktype == null)
+            {
+                var objectType = dll.MainModule.TypeSystem.Object;
+                var injecttype = new TypeDefinition("", "<Indicator_Injected>", TypeAttributes.Public | TypeAttributes.AnsiClass | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit, objectType);
+                dll.MainModule.Types.Add(injecttype);
+                MarkDirty(asm1);
+            }
+        }
+
+        private static bool? _IsInjectedMarked;
+        public static bool IsInjectedMarked()
+        {
+            if (_IsInjectedMarked == null)
+            {
+                string asm1, asm2;
+                UnityAssemblyUtils.GetDefaultScriptAssemblyName(out asm1, out asm2);
+                var asms = System.AppDomain.CurrentDomain.GetAssemblies();
+                for (int i = 0; i < asms.Length; ++i)
+                {
+                    var asm = asms[i];
+                    if (asm.GetName().Name == asm1)
+                    {
+                        _IsInjectedMarked = asm.GetType("<Indicator_Injected>") != null;
+                        break;
+                    }
+                }
+            }
+            return (bool)_IsInjectedMarked;
+        }
     }
 }

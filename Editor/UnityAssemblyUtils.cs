@@ -145,5 +145,73 @@ namespace Capstones.UnityEditorEx
             }
             return true;
         }
+
+        private static string _CachedDefaultScriptAssemblyNameFirstPass = null;
+        private static string _CachedDefaultScriptAssemblyName = null;
+        public static void GetDefaultScriptAssemblyName(out string firstpass, out string defaultasm)
+        {
+            if (_CachedDefaultScriptAssemblyNameFirstPass == null && _CachedDefaultScriptAssemblyName == null)
+            {
+                UnityEditor.Compilation.Assembly found1 = null, found2 = null;
+                var asms = UnityEditor.Compilation.CompilationPipeline.GetAssemblies(UnityEditor.Compilation.AssembliesType.PlayerWithoutTestAssemblies);
+                for (int i = 0; i < asms.Length; ++i)
+                {
+                    var asm = asms[i];
+                    var asmdef = UnityEditor.Compilation.CompilationPipeline.GetAssemblyDefinitionFilePathFromAssemblyName(asm.name);
+                    if (asmdef == null)
+                    {
+                        if (found1 == null)
+                        {
+                            found1 = asm;
+                        }
+                        else
+                        {
+                            found2 = asm;
+                        }
+                    }
+                }
+                if (found2 != null)
+                {
+                    var found1refs = found1.assemblyReferences;
+                    bool shouldExchange = false;
+                    for (int i = 0; i < found1refs.Length; ++i)
+                    {
+                        if (found1refs[i].name == found2.name)
+                        {
+                            shouldExchange = true;
+                            break;
+                        }
+                    }
+                    if (shouldExchange)
+                    {
+                        var exchange = found1;
+                        found1 = found2;
+                        found2 = exchange;
+                    }
+                }
+                else if (found1 == null)
+                {
+                    var maxrefcnt = -1;
+                    for (int i = 0; i < asms.Length; ++i)
+                    {
+                        var asm = asms[i];
+                        int refcnt = 0; 
+                        if (asm.assemblyReferences != null)
+                        {
+                            refcnt = asm.assemblyReferences.Length;
+                        }
+                        if (refcnt > maxrefcnt)
+                        {
+                            maxrefcnt = refcnt;
+                            found1 = asm;
+                        }
+                    }
+                }
+                _CachedDefaultScriptAssemblyNameFirstPass = found1 == null ? null : found1.name;
+                _CachedDefaultScriptAssemblyName = found2 == null ? null : found2.name;
+            }
+            firstpass = _CachedDefaultScriptAssemblyNameFirstPass;
+            defaultasm = _CachedDefaultScriptAssemblyName;
+        }
     }
 }
