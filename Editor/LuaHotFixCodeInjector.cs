@@ -2247,14 +2247,15 @@ namespace Capstones.UnityEditorEx
         {
             string asm1, asm2;
             UnityAssemblyUtils.GetDefaultScriptAssemblyName(out asm1, out asm2);
-            var dll = GetOrLoadAssembly(asm1);
+            var asmlast = asm2 ?? asm1;
+            var dll = GetOrLoadAssembly(asmlast);
             var marktype = dll.MainModule.GetType("<Indicator_Injected>");
             if (marktype == null)
             {
                 var objectType = dll.MainModule.TypeSystem.Object;
                 var injecttype = new TypeDefinition("", "<Indicator_Injected>", TypeAttributes.Public | TypeAttributes.AnsiClass | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit, objectType);
                 dll.MainModule.Types.Add(injecttype);
-                MarkDirty(asm1);
+                MarkDirty(asmlast);
             }
         }
 
@@ -2265,11 +2266,12 @@ namespace Capstones.UnityEditorEx
             {
                 string asm1, asm2;
                 UnityAssemblyUtils.GetDefaultScriptAssemblyName(out asm1, out asm2);
+                var asmlast = asm2 ?? asm1;
                 var asms = System.AppDomain.CurrentDomain.GetAssemblies();
                 for (int i = 0; i < asms.Length; ++i)
                 {
                     var asm = asms[i];
-                    if (asm.GetName().Name == asm1)
+                    if (asm.GetName().Name == asmlast)
                     {
                         _IsInjectedMarked = asm.GetType("<Indicator_Injected>") != null;
                         break;
