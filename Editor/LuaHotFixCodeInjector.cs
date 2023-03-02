@@ -51,16 +51,37 @@ namespace Capstones.UnityEditorEx
                 {
                     if (Dirty)
                     {
-                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = !NoPdb });
-                    }
-                    Asm.Dispose();
-                    Asm = null;
-                    if (Dirty)
-                    {
+                        var ext = System.IO.Path.GetExtension(Path);
+                        var noext = Path.Substring(0, Path.Length - ext.Length);
+                        var pdb = noext + ".pdb";
+                        var tmp = noext + ".tmp" + ext;
+                        var tmppdb = noext + ".tmp" + ".pdb";
+                        var wp = new WriterParameters() { WriteSymbols = !NoPdb };
+                        if (!NoPdb)
+                        {
+                            wp.SymbolStream = PlatDependant.OpenWrite(tmppdb);
+                        }
+                        Asm.Write(tmp, wp);
+                        if (wp.SymbolStream != null)
+                        {
+                            wp.SymbolStream.Dispose();
+                        }
+                        Asm.Dispose();
+                        Asm = null;
                         System.IO.File.Delete(Path);
-                        System.IO.File.Move(Path + "-tmp", Path);
+                        System.IO.File.Move(tmp, Path);
+                        if (!NoPdb)
+                        {
+                            System.IO.File.Delete(pdb);
+                            System.IO.File.Move(tmppdb, pdb);
+                        }
+                        Dirty = false;
                     }
-                    Dirty = false;
+                    else
+                    {
+                        Asm.Dispose();
+                        Asm = null;
+                    }
                 }
             }
             protected internal void WriteTempFile()
@@ -69,17 +90,44 @@ namespace Capstones.UnityEditorEx
                 {
                     if (Dirty)
                     {
-                        Asm.Write(Path + "-tmp", new WriterParameters() { WriteSymbols = !NoPdb });
+                        var ext = System.IO.Path.GetExtension(Path);
+                        var noext = Path.Substring(0, Path.Length - ext.Length);
+                        var pdb = noext + ".pdb";
+                        var tmp = noext + ".tmp" + ext;
+                        var tmppdb = noext + ".tmp" + ".pdb";
+                        var wp = new WriterParameters() { WriteSymbols = !NoPdb };
+                        if (!NoPdb)
+                        {
+                            wp.SymbolStream = PlatDependant.OpenWrite(tmppdb);
+                        }
+                        Asm.Write(tmp, wp);
+                        if (wp.SymbolStream != null)
+                        {
+                            wp.SymbolStream.Dispose();
+                        }
+                        Dirty = false;
                     }
-                    Dirty = false;
                 }
             }
             protected internal void MoveTempFile()
             {
-                if (System.IO.File.Exists(Path + "-tmp"))
+                var ext = System.IO.Path.GetExtension(Path);
+                var noext = Path.Substring(0, Path.Length - ext.Length);
+                var tmp = noext + ".tmp" + ext;
+                if (System.IO.File.Exists(tmp))
                 {
                     System.IO.File.Delete(Path);
-                    System.IO.File.Move(Path + "-tmp", Path);
+                    System.IO.File.Move(tmp, Path);
+                    if (!NoPdb)
+                    {
+                        var pdb = noext + ".pdb";
+                        var tmppdb = noext + ".tmp" + ".pdb";
+                        if (System.IO.File.Exists(tmppdb))
+                        {
+                            System.IO.File.Delete(pdb);
+                            System.IO.File.Move(tmppdb, pdb);
+                        }
+                    }
                 }
             }
         }
