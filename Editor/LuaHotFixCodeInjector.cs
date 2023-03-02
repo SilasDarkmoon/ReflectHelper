@@ -1251,6 +1251,8 @@ namespace Capstones.UnityEditorEx
 
         internal static void Inject(MethodDefinition method)
         {
+            method.DebugInformation.SequencePoints.Clear();
+            method.DebugInformation.Scope = null;
             var luadll = GetOrLoadAssembly("CapsLua");
             string token = ReflectAnalyzer.GetIDString(method.DeclaringType) + " " + ReflectAnalyzer.GetIDString(method);
 
