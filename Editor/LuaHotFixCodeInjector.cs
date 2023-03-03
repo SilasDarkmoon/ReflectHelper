@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using UnityEngine;
 using UnityEditor;
 using Capstones.UnityEngineEx;
@@ -16,6 +17,24 @@ namespace Capstones.UnityEditorEx
         #region Load or Unload Assemblies
         private class LoadedAssembly : IDisposable
         {
+            private class SymbolWriterProvider : ISymbolWriterProvider
+            {
+                private DefaultSymbolWriterProvider Inner = new DefaultSymbolWriterProvider();
+
+                public ISymbolWriter GetSymbolWriter(ModuleDefinition module, string fileName)
+                {
+                    var ext = System.IO.Path.GetExtension(fileName);
+                    var noext = fileName.Substring(0, fileName.Length - ext.Length);
+                    var tmppdb = noext + ".tmp" + ".pdb";
+                    return Inner.GetSymbolWriter(module, tmppdb);
+                }
+                public ISymbolWriter GetSymbolWriter(ModuleDefinition module, System.IO.Stream symbolStream)
+                {
+                    throw new NotImplementedException();
+                }
+            }
+            private static SymbolWriterProvider SymbolWriterProviderInstance = new SymbolWriterProvider();
+
             public AssemblyDefinition Asm;
             public string Path;
             public bool Dirty;
@@ -59,13 +78,9 @@ namespace Capstones.UnityEditorEx
                         var wp = new WriterParameters() { WriteSymbols = !NoPdb };
                         if (!NoPdb)
                         {
-                            wp.SymbolStream = PlatDependant.OpenWrite(tmppdb);
+                            wp.SymbolWriterProvider = SymbolWriterProviderInstance;
                         }
                         Asm.Write(tmp, wp);
-                        if (wp.SymbolStream != null)
-                        {
-                            wp.SymbolStream.Dispose();
-                        }
                         Asm.Dispose();
                         Asm = null;
                         System.IO.File.Delete(Path);
@@ -98,13 +113,9 @@ namespace Capstones.UnityEditorEx
                         var wp = new WriterParameters() { WriteSymbols = !NoPdb };
                         if (!NoPdb)
                         {
-                            wp.SymbolStream = PlatDependant.OpenWrite(tmppdb);
+                            wp.SymbolWriterProvider = SymbolWriterProviderInstance;
                         }
                         Asm.Write(tmp, wp);
-                        if (wp.SymbolStream != null)
-                        {
-                            wp.SymbolStream.Dispose();
-                        }
                         Dirty = false;
                     }
                 }
@@ -1297,10 +1308,132 @@ namespace Capstones.UnityEditorEx
             return false;
         }
 
+        private abstract class InstructionOffsetOwner
+        {
+            public object Owner { get; set; }
+            public abstract InstructionOffset Offset { get; set; }
+        }
+        private abstract class InstructionOffsetOwner<T> : InstructionOffsetOwner
+        {
+            public new T Owner
+            {
+                get
+                {
+                    return (T)base.Owner;
+                }
+                set
+                {
+                    base.Owner = value;
+                }
+            }
+        }
+        private class ScopeStartInstructionOffsetOwner : InstructionOffsetOwner<ScopeDebugInformation>
+        {
+            public ScopeStartInstructionOffsetOwner(ScopeDebugInformation scope)
+            {
+                Owner = scope;
+            }
+            public override InstructionOffset Offset
+            {
+                get
+                {
+                    return Owner.Start;
+                }
+                set
+                {
+                    Owner.Start = value;
+                }
+            }
+        }
+        private class ScopeEndInstructionOffsetOwner : InstructionOffsetOwner<ScopeDebugInformation>
+        {
+            public ScopeEndInstructionOffsetOwner(ScopeDebugInformation scope)
+            {
+                Owner = scope;
+            }
+            public override InstructionOffset Offset
+            {
+                get
+                {
+                    return Owner.End;
+                }
+                set
+                {
+                    Owner.End = value;
+                }
+            }
+        }
+        private class SequencePointInstructionOffsetOwner : InstructionOffsetOwner<SequencePoint>
+        {
+            private static Func<SequencePoint, InstructionOffset> GetFunc;
+            private static Action<SequencePoint, InstructionOffset> SetFunc;
+
+            static SequencePointInstructionOffsetOwner()
+            {
+                var fi = typeof(SequencePoint).GetField("offset", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var pSequencePoint = Expression.Parameter(typeof(SequencePoint));
+                GetFunc = Expression.Lambda<Func<SequencePoint, InstructionOffset>>(Expression.Field(pSequencePoint, fi), pSequencePoint).Compile();
+                var pInstructionOffset = Expression.Parameter(typeof(InstructionOffset));
+                SetFunc = Expression.Lambda<Action<SequencePoint, InstructionOffset>>(Expression.Assign(Expression.Field(pSequencePoint, fi), pInstructionOffset), pSequencePoint, pInstructionOffset).Compile();
+            }
+
+            public override InstructionOffset Offset
+            {
+                get
+                {
+                    return GetFunc(Owner);
+                }
+                set
+                {
+                    SetFunc(Owner, value);
+                }
+            }
+
+            public SequencePointInstructionOffsetOwner(SequencePoint sp)
+            {
+                Owner = sp;
+            }
+        }
         internal static void Inject(MethodDefinition method)
         {
-            method.DebugInformation.SequencePoints.Clear();
-            method.DebugInformation.Scope = null;
+            // Contruct DebugInfo Mapping
+            List<InstructionOffsetOwner> offsetOwners = new List<InstructionOffsetOwner>();
+            var scopes = method.DebugInformation.GetScopes();
+            foreach (var scope in scopes)
+            {
+                offsetOwners.Add(new ScopeStartInstructionOffsetOwner(scope));
+                offsetOwners.Add(new ScopeEndInstructionOffsetOwner(scope));
+            }
+            var debugseqs = method.DebugInformation.SequencePoints;
+            foreach (var dseq in debugseqs)
+            {
+                offsetOwners.Add(new SequencePointInstructionOffsetOwner(dseq));
+            }
+            Dictionary<InstructionOffsetOwner, Instruction> owner2ins = new Dictionary<InstructionOffsetOwner, Instruction>();
+            Dictionary<Instruction, List<InstructionOffsetOwner>> ins2owner = new Dictionary<Instruction, List<InstructionOffsetOwner>>();
+            Dictionary<int, Instruction> oldoff2ins = new Dictionary<int, Instruction>();
+            foreach (var ins in method.Body.Instructions)
+            {
+                oldoff2ins[ins.Offset] = ins;
+            }
+            foreach (var owner in offsetOwners)
+            {
+                if (owner.Offset.IsEndOfMethod) continue;
+                Instruction ins;
+                if (oldoff2ins.TryGetValue(owner.Offset.Offset, out ins))
+                {
+                    owner2ins[owner] = ins;
+                    List<InstructionOffsetOwner> list;
+                    if (!ins2owner.TryGetValue(ins, out list))
+                    {
+                        list = new List<InstructionOffsetOwner>();
+                        ins2owner[ins] = list;
+                    }
+                    list.Add(owner);
+                }
+            }
+            // Contruct DebugInfo Mapping - END
+
             var luadll = GetOrLoadAssembly("CapsLua");
             string token = ReflectAnalyzer.GetIDString(method.DeclaringType) + " " + ReflectAnalyzer.GetIDString(method);
 
@@ -1693,12 +1826,32 @@ namespace Capstones.UnityEditorEx
                             }
                         }
                     }
+                    if (ins2owner.ContainsKey(dins))
+                    {
+                        var list = ins2owner[dins];
+                        ins2owner.Remove(dins);
+                        var nxtins = dins.Next;
+                        ins2owner[nxtins] = list;
+                        foreach (var owner in list)
+                        {
+                            owner2ins[owner] = nxtins;
+                        }
+                    }
                     emitter.Remove(dins);
                 }
             }
 
             // replace invalid ShortInlineBrTarget to InlineBrTarget
             FixInvalidShortBr(method);
+
+            // Fix DebugInfo
+            foreach (var kvp in owner2ins)
+            {
+                var owner = kvp.Key;
+                var ins = kvp.Value;
+                owner.Offset = new InstructionOffset(ins);
+            }
+            // Fix DebugInfo - END
 
             MarkDirty(method.Module.Assembly.Name.Name);
         }
