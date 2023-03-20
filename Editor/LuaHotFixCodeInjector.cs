@@ -25,7 +25,7 @@ namespace Capstones.UnityEditorEx
                 {
                     var ext = System.IO.Path.GetExtension(fileName);
                     var noext = fileName.Substring(0, fileName.Length - ext.Length);
-                    var tmppdb = noext + ".tmp" + ".pdb";
+                    var tmppdb = noext + ".pdb";
                     return Inner.GetSymbolWriter(module, tmppdb);
                 }
                 public ISymbolWriter GetSymbolWriter(ModuleDefinition module, System.IO.Stream symbolStream)
@@ -1835,6 +1835,10 @@ namespace Capstones.UnityEditorEx
                         foreach (var owner in list)
                         {
                             owner2ins[owner] = nxtins;
+                            if (owner is SequencePointInstructionOffsetOwner)
+                            {
+                                debugseqs.Remove((SequencePoint)owner.Owner);
+                            }
                         }
                     }
                     emitter.Remove(dins);
@@ -1852,6 +1856,9 @@ namespace Capstones.UnityEditorEx
                 owner.Offset = new InstructionOffset(ins);
             }
             // Fix DebugInfo - END
+
+            // Adding DebugInfo to NEW Instructions
+            // Adding DebugInfo to NEW Instructions - END
 
             MarkDirty(method.Module.Assembly.Name.Name);
         }
