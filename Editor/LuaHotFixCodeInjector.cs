@@ -7,6 +7,8 @@ using UnityEditor;
 using Capstones.UnityEngineEx;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Mono.Cecil.Pdb;
+using Mono.Cecil.Mdb;
 
 using Object = UnityEngine.Object;
 
@@ -19,18 +21,19 @@ namespace Capstones.UnityEditorEx
         {
             private class SymbolWriterProvider : ISymbolWriterProvider
             {
-                private DefaultSymbolWriterProvider Inner = new DefaultSymbolWriterProvider();
+                private ISymbolWriterProvider Inner = new PortablePdbWriterProvider();
 
                 public ISymbolWriter GetSymbolWriter(ModuleDefinition module, string fileName)
                 {
-                    var ext = System.IO.Path.GetExtension(fileName);
-                    var noext = fileName.Substring(0, fileName.Length - ext.Length);
-                    var tmppdb = noext + ".pdb";
-                    return Inner.GetSymbolWriter(module, tmppdb);
+                    //var ext = System.IO.Path.GetExtension(fileName);
+                    //var noext = fileName.Substring(0, fileName.Length - ext.Length);
+                    //var tmppdb = noext + ".pdb";
+                    //return Inner.GetSymbolWriter(module, tmppdb);
+                    return Inner.GetSymbolWriter(module, fileName);
                 }
                 public ISymbolWriter GetSymbolWriter(ModuleDefinition module, System.IO.Stream symbolStream)
                 {
-                    throw new NotImplementedException();
+                    return Inner.GetSymbolWriter(module, symbolStream);
                 }
             }
             private static SymbolWriterProvider SymbolWriterProviderInstance = new SymbolWriterProvider();
@@ -1591,7 +1594,7 @@ namespace Capstones.UnityEditorEx
                 if (shouldReturnVal)
                 {
                     if (hasRet)
-                    { 
+                    {
                         PostParts.Add(emitter.Create(OpCodes.Stloc, rvvar));
                     }
                 }
@@ -1835,10 +1838,6 @@ namespace Capstones.UnityEditorEx
                         foreach (var owner in list)
                         {
                             owner2ins[owner] = nxtins;
-                            if (owner is SequencePointInstructionOffsetOwner)
-                            {
-                                debugseqs.Remove((SequencePoint)owner.Owner);
-                            }
                         }
                     }
                     emitter.Remove(dins);
