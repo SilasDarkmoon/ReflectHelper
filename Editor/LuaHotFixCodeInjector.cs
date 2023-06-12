@@ -132,6 +132,12 @@ namespace Capstones.UnityEditorEx
                 {
                     System.IO.File.Delete(Path);
                     System.IO.File.Move(tmp, Path);
+                    if (!string.IsNullOrEmpty(CopyToDestFolder))
+                    {
+                        var destdll = System.IO.Path.Combine(CopyToDestFolder, System.IO.Path.GetFileName(Path));
+                        System.IO.File.Delete(destdll);
+                        System.IO.File.Copy(Path, destdll);
+                    }
                     if (!NoPdb)
                     {
                         var pdb = noext + ".pdb";
@@ -140,6 +146,12 @@ namespace Capstones.UnityEditorEx
                         {
                             System.IO.File.Delete(pdb);
                             System.IO.File.Move(tmppdb, pdb);
+                            if (!string.IsNullOrEmpty(CopyToDestFolder))
+                            {
+                                var destpdb = System.IO.Path.Combine(CopyToDestFolder, System.IO.Path.GetFileName(pdb));
+                                System.IO.File.Delete(destpdb);
+                                System.IO.File.Copy(pdb, destpdb);
+                            }
                         }
                     }
                 }
@@ -254,6 +266,8 @@ namespace Capstones.UnityEditorEx
         {
             LoadInternalAssemblies();
         }
+
+        public static string CopyToDestFolder;
 
         internal static AssemblyDefinition GetAssembly(string name)
         {
