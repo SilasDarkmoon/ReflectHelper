@@ -1,8 +1,11 @@
 {
     "name": "ReflectHelper",
+    "rootNamespace": "",
     "references": [
         "ResManagerEditor",
-        "ResManager"
+        "ResManager",
+        "CapsMods",
+        "CapsModsEditor"
     ],
     "includePlatforms": [
         "Editor"
@@ -18,5 +21,6 @@
     ],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": []
+    "versionDefines": [],
+    "noEngineReferences": false
 }
